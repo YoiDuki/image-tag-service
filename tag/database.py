@@ -440,8 +440,8 @@ def get_filters():
     )
     return {
         "authors": authors,
-        "media_types": sorted(media_types),
-        "styles": sorted(styles),
+        "media_types": media_types,
+        "styles": styles,
         "tags": tags,
         "synonym_map": synonym_map,
     }
