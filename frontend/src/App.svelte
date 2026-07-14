@@ -477,7 +477,7 @@ let searchTimer = $state(null)
         {#if authorFilterFocused && filteredAuthorOptions.length > 0}
           <div class="tag-filter-dropdown">
             {#each filteredAuthorOptions.slice(0, 50) as a}
-              <button class="tag-filter-option" onmousedown={() => { filters.author = a.name; applyFilters(); authorFilterFocused = false }}>{a.name} ({a.count})</button>
+              <button class="tag-filter-option" onmousedown={() => { filters.author = a.name; applyFilters(); authorFilterFocused = false; document.activeElement?.blur() }}>{a.name} ({a.count})</button>
             {/each}
           </div>
         {/if}
@@ -519,9 +519,9 @@ let searchTimer = $state(null)
         {/if}
         {#if tagFilterFocused}
           <div class="tag-filter-dropdown">
-            <button class="tag-filter-option" onmousedown={() => { filters.tag = '__no_tag__'; applyFilters(); tagFilterFocused = false }}>No Tag</button>
+            <button class="tag-filter-option" onmousedown={() => { filters.tag = '__no_tag__'; applyFilters(); tagFilterFocused = false; document.activeElement?.blur() }}>No Tag</button>
             {#each resolvedTagsAll.filter(t => !filters.tag || t.name.toLowerCase().includes(filters.tag.toLowerCase())).slice(0, 50) as t}
-              <button class="tag-filter-option" onmousedown={() => { filters.tag = t.name; applyFilters(); tagFilterFocused = false }}>{t.name} ({t.count})</button>
+              <button class="tag-filter-option" onmousedown={() => { filters.tag = t.name; applyFilters(); tagFilterFocused = false; document.activeElement?.blur() }}>{t.name} ({t.count})</button>
             {/each}
           </div>
         {/if}
