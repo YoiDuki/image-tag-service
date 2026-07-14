@@ -54,14 +54,26 @@ let searchTimer = $state(null)
   }
 
   const resolvedTagsAll = $derived(
-    [...new Set(filterOptions.tags.map(t => resolveTag(t)))].sort()
+    (() => {
+      const map = {}
+      for (const t of filterOptions.tags) {
+        const canonical = synonymMap[t.name] || t.name
+        if (!map[canonical]) map[canonical] = { name: canonical, count: 0 }
+        map[canonical].count += t.count
+      }
+      return Object.values(map).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    })()
   )
 
   const resolvedTagsFiltered = $derived(
     tagFilter
-      ? resolvedTagsAll.filter(t => t.toLowerCase().includes(tagFilter.toLowerCase()))
+      ? resolvedTagsAll.filter(t => t.name.toLowerCase().includes(tagFilter.toLowerCase()))
       : resolvedTagsAll
   )
+
+  const resolvedTagNames = $derived(resolvedTagsAll.map(t => t.name))
+
+  const resolvedTagsFilteredNames = $derived(resolvedTagsFiltered.map(t => t.name))
 
   let tagSynonyms = $state([])
   let synonymSearch = $state('')
@@ -341,15 +353,10 @@ let searchTimer = $state(null)
   async function startRescan() {
     if (selectedForRescan.size === 0) return
     rescanning = true
-    let count = 0
-    for (const filename of selectedForRescan) {
-      try {
-        await updateImage(filename, { status: 'pending' })
-        count++
-      } catch (e) {
-        console.error(`Rescan failed for ${filename}:`, e)
-      }
-    }
+    const results = await Promise.allSettled(
+      [...selectedForRescan].map(filename => updateImage(filename, { status: 'pending' }))
+    )
+    const count = results.filter(r => r.status === 'fulfilled').length
     rescanMode = false
     selectedForRescan = new Set()
     rescanning = false
@@ -509,8 +516,8 @@ let searchTimer = $state(null)
         {#if tagFilterFocused}
           <div class="tag-filter-dropdown">
             <button class="tag-filter-option" onmousedown={() => { filters.tag = '__no_tag__'; applyFilters(); tagFilterFocused = false }}>No Tag</button>
-            {#each resolvedTagsAll.filter(t => !filters.tag || t.toLowerCase().includes(filters.tag.toLowerCase())).slice(0, 50) as t}
-              <button class="tag-filter-option" onmousedown={() => { filters.tag = t; applyFilters(); tagFilterFocused = false }}>{t}</button>
+            {#each resolvedTagsAll.filter(t => !filters.tag || t.name.toLowerCase().includes(filters.tag.toLowerCase())).slice(0, 50) as t}
+              <button class="tag-filter-option" onmousedown={() => { filters.tag = t.name; applyFilters(); tagFilterFocused = false }}>{t.name} ({t.count})</button>
             {/each}
           </div>
         {/if}
@@ -702,7 +709,7 @@ let searchTimer = $state(null)
           <div class="tag-picker">
             <input type="text" bind:value={tagFilter} class="tag-picker-search" placeholder="Filter tags..." />
             <div class="tag-picker-list">
-              {#each resolvedTagsFiltered as tag}
+              {#each resolvedTagsFilteredNames as tag}
                 <button
                   class="tag-pick-btn"
                   class:in-list={currentTags.includes(tag)}

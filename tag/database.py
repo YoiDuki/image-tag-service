@@ -403,7 +403,7 @@ def get_filters():
     author_counts = {}
     media_types = set()
     styles = set()
-    tags = set()
+    tag_counts = {}
     for r in rows:
         if r["author_username"]:
             name = r["author_username"]
@@ -418,18 +418,23 @@ def get_filters():
                 if isinstance(lst, list):
                     for t in lst:
                         if isinstance(t, str):
-                            tags.add(t)
+                            canonical = synonym_map.get(t, t)
+                            tag_counts[canonical] = tag_counts.get(canonical, 0) + 1
             except (json.JSONDecodeError, TypeError):
                 pass
     authors = sorted(
         [{"name": n, "count": c} for n, c in author_counts.items()],
         key=lambda a: (-a["count"], a["name"]),
     )
+    tags = sorted(
+        [{"name": n, "count": c} for n, c in tag_counts.items()],
+        key=lambda t: (-t["count"], t["name"]),
+    )
     return {
         "authors": authors,
         "media_types": sorted(media_types),
         "styles": sorted(styles),
-        "tags": sorted(tags),
+        "tags": tags,
         "synonym_map": synonym_map,
     }
 
