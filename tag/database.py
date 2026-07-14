@@ -401,17 +401,17 @@ def get_filters():
     conn.close()
     synonym_map = {r["synonym"]: r["canonical"] for r in syn_rows}
     author_counts = {}
-    media_types = set()
-    styles = set()
+    media_type_counts = {}
+    style_counts = {}
     tag_counts = {}
     for r in rows:
         if r["author_username"]:
             name = r["author_username"]
             author_counts[name] = author_counts.get(name, 0) + 1
         if r["media_type"] and r["media_type"] != "unknown":
-            media_types.add(r["media_type"])
+            media_type_counts[r["media_type"]] = media_type_counts.get(r["media_type"], 0) + 1
         if r["style"]:
-            styles.add(r["style"])
+            style_counts[r["style"]] = style_counts.get(r["style"], 0) + 1
         if r["tags"]:
             try:
                 lst = json.loads(r["tags"])
@@ -425,6 +425,14 @@ def get_filters():
     authors = sorted(
         [{"name": n, "count": c} for n, c in author_counts.items()],
         key=lambda a: (-a["count"], a["name"]),
+    )
+    media_types = sorted(
+        [{"name": n, "count": c} for n, c in media_type_counts.items()],
+        key=lambda m: (-m["count"], m["name"]),
+    )
+    styles = sorted(
+        [{"name": n, "count": c} for n, c in style_counts.items()],
+        key=lambda s: (-s["count"], s["name"]),
     )
     tags = sorted(
         [{"name": n, "count": c} for n, c in tag_counts.items()],

@@ -56,10 +56,13 @@ let searchTimer = $state(null)
   const resolvedTagsAll = $derived(
     (() => {
       const map = {}
-      for (const t of filterOptions.tags) {
-        const canonical = synonymMap[t.name] || t.name
+      const raw = filterOptions.tags
+      for (const t of raw) {
+        const tagName = typeof t === 'string' ? t : t.name
+        const count = typeof t === 'string' ? 0 : (t.count || 0)
+        const canonical = synonymMap[tagName] || tagName
         if (!map[canonical]) map[canonical] = { name: canonical, count: 0 }
-        map[canonical].count += t.count
+        map[canonical].count += count || 1
       }
       return Object.values(map).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
     })()
@@ -435,6 +438,7 @@ let searchTimer = $state(null)
     <h1>Image Tag Service</h1>
     <div class="header-actions">
       <div class="stats">
+        {#if pageInfo.total > 0}<span class="stat filtered">Filtered: {pageInfo.total}</span>{/if}
         <span class="stat">Total: {stats.total}</span>
         <span class="stat pending">Pending: {stats.pending}</span>
         <span class="stat done">Done: {stats.done}</span>
@@ -486,13 +490,13 @@ let searchTimer = $state(null)
       <select bind:value={filters.media_type} onchange={applyFilters} class="filter-select">
         <option value="">Media: All</option>
         {#each filterOptions.media_types as m}
-          <option value={m}>{m}</option>
+          <option value={m.name}>{m.name} ({m.count})</option>
         {/each}
       </select>
       <select bind:value={filters.style} onchange={applyFilters} class="filter-select">
         <option value="">Style: All</option>
         {#each filterOptions.styles as s}
-          <option value={s}>{s}</option>
+          <option value={s.name}>{s.name} ({s.count})</option>
         {/each}
       </select>
       <div class="tag-filter-wrap">
@@ -845,6 +849,7 @@ let searchTimer = $state(null)
 
   .stats { display: flex; gap: 16px; font-size: 13px; }
   .stat { padding: 4px 10px; background: #1a1a1a; border-radius: 6px; }
+  .stat.filtered { color: #2a6eff; }
   .stat.pending { color: #f0ad4e; }
   .stat.done { color: #5cb85c; }
   .stat.error { color: #d9534f; }
