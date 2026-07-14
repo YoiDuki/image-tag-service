@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+tags.db
+tags.db-shm
+tags.db-wal
+frontend/node_modules/
+frontend/dist/
+models/models--*/
+models/*.safetensors
+models/*.onnx
+*.pt
+.DS_Store
+*.log
