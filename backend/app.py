@@ -1,80 +1,85 @@
 import os
 import json
-from flask import Flask, request, jsonify, send_file, send_from_directory
-from flask_cors import CORS
+from fastapi import FastAPI, Query, HTTPException
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from starlette.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from tag.database import init_db, get_all_images, get_filters, search_by_color, upsert_image, image_exists, get_conn, get_tag_meta, upsert_tag_meta, delete_tag_meta, get_tag_synonyms, add_tag_synonym, delete_tag_synonym
 
-app = Flask(__name__, static_folder="../frontend/dist", static_url_path="")
-CORS(app)
 init_db()
 
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
-def serve_frontend(path):
-    dist = app.static_folder
-    if not dist or not os.path.isdir(dist):
-        return jsonify({"error": "frontend not built"}), 503
-    if path and os.path.isfile(os.path.join(dist, path)):
-        return send_from_directory(dist, path)
-    return send_from_directory(dist, "index.html")
+app = FastAPI(title="Image Tag Service")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+DIST = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
 
-@app.route("/api/images/<filename>/file", methods=["GET"])
-def serve_image(filename):
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/api/images")
+def list_images(
+    status: str = Query(None),
+    author: str = Query(None),
+    media_type: str = Query(None),
+    style: str = Query(None),
+    tag: str = Query(None),
+    nsfw: str = Query(None),
+    search: str = Query(None),
+    sort: str = Query("updated_at"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(24, ge=1, le=200),
+):
+    return get_all_images(
+        status=status, author=author, media_type=media_type,
+        style=style, tag=tag, nsfw=nsfw,
+        search=search, sort=sort,
+        page=page, per_page=per_page,
+    )
+
+
+@app.get("/api/filters")
+def filters():
+    return get_filters()
+
+
+@app.get("/api/images/color")
+def search_color_endpoint(
+    r: int = Query(...),
+    g: int = Query(...),
+    b: int = Query(...),
+    threshold: int = Query(100),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(24, ge=1, le=200),
+):
+    return search_by_color(r, g, b, threshold, page, per_page)
+
+
+@app.get("/api/images/{filename}/file")
+def serve_image(filename: str):
     conn = get_conn()
     row = conn.execute(
         "SELECT filepath FROM images WHERE filename = ?", (filename,)
     ).fetchone()
     conn.close()
     if row is None:
-        return jsonify({"error": "not found"}), 404
-    if not os.path.isfile(row["filepath"]):
-        return jsonify({"error": "file not found on disk"}), 404
-    return send_file(row["filepath"])
+        raise HTTPException(404, "not found")
+    fpath = row["filepath"]
+    if not os.path.isfile(fpath):
+        raise HTTPException(404, "file not found on disk")
+    return FileResponse(fpath)
 
 
-@app.route("/api/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok"})
-
-
-@app.route("/api/images", methods=["GET"])
-def list_images():
-    result = get_all_images(
-        status=request.args.get("status"),
-        author=request.args.get("author"),
-        media_type=request.args.get("media_type"),
-        style=request.args.get("style"),
-        tag=request.args.get("tag"),
-        nsfw=request.args.get("nsfw"),
-        search=request.args.get("search"),
-        sort=request.args.get("sort", "updated_at"),
-        page=request.args.get("page", 1, type=int),
-        per_page=request.args.get("per_page", 24, type=int),
-    )
-    return jsonify(result)
-
-
-@app.route("/api/filters", methods=["GET"])
-def filters():
-    return jsonify(get_filters())
-
-
-@app.route("/api/images/color", methods=["GET"])
-def search_color():
-    r = request.args.get("r", type=int)
-    g = request.args.get("g", type=int)
-    b = request.args.get("b", type=int)
-    if r is None or g is None or b is None:
-        return jsonify({"error": "r, g, b are required"}), 400
-    threshold = request.args.get("threshold", 100, type=int)
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 24, type=int)
-    return jsonify(search_by_color(r, g, b, threshold, page, per_page))
-
-
-@app.route("/api/images/<filename>", methods=["GET"])
-def get_image(filename):
+@app.get("/api/images/{filename}")
+def get_image(filename: str):
     conn = get_conn()
     _COLS = "id, filename, filepath, tags, artists, characters, media_type, style, nsfw, status, error, palette, author_username, posted_at, created_at, updated_at, tags_edited"
     row = conn.execute(
@@ -82,31 +87,37 @@ def get_image(filename):
     ).fetchone()
     conn.close()
     if row is None:
-        return jsonify({"error": "not found"}), 404
+        raise HTTPException(404, "not found")
     d = dict(row)
     for field in ("tags", "palette", "artists", "characters"):
         if isinstance(d.get(field), str):
             d[field] = json.loads(d[field])
-    return jsonify(d)
+    return d
 
 
-@app.route("/api/images/<filename>", methods=["PUT"])
-def update_image(filename):
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "no data"}), 400
+class ImageUpdate(BaseModel):
+    tags: list | None = None
+    artists: list | None = None
+    characters: list | None = None
+    media_type: str | None = None
+    style: str | None = None
+    nsfw: bool | None = None
+    palette: list | None = None
+    author_username: str | None = None
+    posted_at: str | None = None
+    status: str | None = None
+    error: str | None = None
+    filepath: str | None = None
+
+
+@app.put("/api/images/{filename}")
+def update_image_endpoint(filename: str, data: ImageUpdate):
     if not image_exists(filename):
-        return jsonify({"error": "not found"}), 404
+        raise HTTPException(404, "not found")
 
-    allowed_fields = {
-        "tags", "artists", "characters", "media_type", "style",
-        "nsfw", "palette",
-        "author_username", "posted_at", "status", "error", "filepath",
-    }
-    update_data = {k: v for k, v in data.items() if k in allowed_fields}
-
+    update_data = {k: v for k, v in data.model_dump(exclude_none=True).items() if v is not None}
     if not update_data:
-        return jsonify({"error": "no valid fields"}), 400
+        raise HTTPException(400, "no valid fields")
 
     set_clauses = []
     params = []
@@ -130,19 +141,19 @@ def update_image(filename):
     )
     conn.commit()
     conn.close()
-    return jsonify({"status": "updated"})
+    return {"status": "updated"}
 
 
-@app.route("/api/images/<filename>", methods=["DELETE"])
-def delete_image(filename):
+@app.delete("/api/images/{filename}")
+def delete_image_endpoint(filename: str):
     conn = get_conn()
     conn.execute("DELETE FROM images WHERE filename = ?", (filename,))
     conn.commit()
     conn.close()
-    return jsonify({"status": "deleted"})
+    return {"status": "deleted"}
 
 
-@app.route("/api/stats", methods=["GET"])
+@app.get("/api/stats")
 def stats():
     conn = get_conn()
     total = conn.execute("SELECT COUNT(*) as c FROM images").fetchone()["c"]
@@ -156,59 +167,70 @@ def stats():
         "SELECT COUNT(*) as c FROM images WHERE status = 'error'"
     ).fetchone()["c"]
     conn.close()
-    return jsonify({"total": total, "pending": pending, "done": done, "error": error})
+    return {"total": total, "pending": pending, "done": done, "error": error}
 
 
-@app.route("/api/tags-meta", methods=["GET"])
-def list_tags_meta():
-    search = request.args.get("search")
-    return jsonify(get_tag_meta(search=search))
+@app.get("/api/tags-meta")
+def list_tags_meta(search: str = Query(None)):
+    return get_tag_meta(search=search)
 
 
-@app.route("/api/tags-meta", methods=["POST"])
-def add_tag_meta():
-    data = request.get_json()
-    if not data or "name" not in data:
-        return jsonify({"error": "name is required"}), 400
-    upsert_tag_meta(data["name"], data.get("description", ""))
-    return jsonify({"status": "ok"})
+class TagMetaCreate(BaseModel):
+    name: str
+    description: str = ""
 
 
-@app.route("/api/tags-meta/<name>", methods=["PUT"])
-def update_tag_meta(name):
-    data = request.get_json()
-    if not data or "description" not in data:
-        return jsonify({"error": "description is required"}), 400
-    upsert_tag_meta(name, data["description"])
-    return jsonify({"status": "ok"})
+@app.post("/api/tags-meta")
+def add_tag_meta_endpoint(data: TagMetaCreate):
+    upsert_tag_meta(data.name, data.description)
+    return {"status": "ok"}
 
 
-@app.route("/api/tags-meta/<name>", methods=["DELETE"])
-def delete_tag_meta_route(name):
+class TagMetaUpdate(BaseModel):
+    description: str
+
+
+@app.put("/api/tags-meta/{name}")
+def update_tag_meta_endpoint(name: str, data: TagMetaUpdate):
+    upsert_tag_meta(name, data.description)
+    return {"status": "ok"}
+
+
+@app.delete("/api/tags-meta/{name}")
+def delete_tag_meta_endpoint(name: str):
     delete_tag_meta(name)
-    return jsonify({"status": "deleted"})
+    return {"status": "deleted"}
 
 
-@app.route("/api/tag-synonyms", methods=["GET"])
-def list_tag_synonyms():
-    search = request.args.get("search")
-    return jsonify(get_tag_synonyms(search=search))
+@app.get("/api/tag-synonyms")
+def list_tag_synonyms(search: str = Query(None)):
+    return get_tag_synonyms(search=search)
 
 
-@app.route("/api/tag-synonyms", methods=["POST"])
-def add_tag_synonym_route():
-    data = request.get_json()
-    if not data or "synonym" not in data or "canonical" not in data:
-        return jsonify({"error": "synonym and canonical are required"}), 400
-    add_tag_synonym(data["synonym"], data["canonical"])
-    return jsonify({"status": "ok"})
+class TagSynonymCreate(BaseModel):
+    synonym: str
+    canonical: str
 
 
-@app.route("/api/tag-synonyms/<synonym>", methods=["DELETE"])
-def delete_tag_synonym_route(synonym):
+@app.post("/api/tag-synonyms")
+def add_tag_synonym_endpoint(data: TagSynonymCreate):
+    add_tag_synonym(data.synonym, data.canonical)
+    return {"status": "ok"}
+
+
+@app.delete("/api/tag-synonyms/{synonym}")
+def delete_tag_synonym_endpoint(synonym: str):
     delete_tag_synonym(synonym)
-    return jsonify({"status": "deleted"})
+    return {"status": "deleted"}
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=not os.environ.get("PROD"))
+if os.path.isdir(DIST):
+    @app.get("/{full_path:path}")
+    def serve_frontend(full_path: str):
+        file_path = os.path.join(DIST, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        index = os.path.join(DIST, "index.html")
+        if os.path.isfile(index):
+            return HTMLResponse(open(index).read())
+        return JSONResponse({"error": "frontend not built"}, status_code=503)

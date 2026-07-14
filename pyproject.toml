@@ -3,8 +3,8 @@ name = "image-tag-service"
 version = "0.3.0"
 requires-python = ">=3.10"
 dependencies = [
-    "flask>=3.0",
-    "flask-cors>=4.0",
+    "fastapi>=0.139",
+    "uvicorn[standard]>=0.51",
     "pillow>=10.0",
     "numpy>=1.23",
     "huggingface-hub>=0.20",
