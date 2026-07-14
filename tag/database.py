@@ -447,6 +447,51 @@ def get_filters():
     }
 
 
+def generate_tag_descriptions(top_n=10):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT tags FROM images WHERE tags_edited = 1"
+    ).fetchall()
+    conn.close()
+    cooccur = {}
+    total = 0
+    for r in rows:
+        try:
+            lst = json.loads(r["tags"])
+            if not isinstance(lst, list):
+                continue
+        except (json.JSONDecodeError, TypeError):
+            continue
+        lst = [t for t in lst if isinstance(t, str) and t.strip()]
+        if not lst:
+            continue
+        total += 1
+        for t in lst:
+            if t not in cooccur:
+                cooccur[t] = {}
+            for other in lst:
+                if other != t:
+                    cooccur[t][other] = cooccur[t].get(other, 0) + 1
+    print(f"[tag_desc] Parsed {total} edited images, {len(cooccur)} unique tags")
+    updated = 0
+    conn = get_conn()
+    for tag, others in cooccur.items():
+        sorted_others = sorted(others.items(), key=lambda x: -x[1])
+        top = [o for o, _ in sorted_others[:top_n]]
+        if not top:
+            continue
+        desc = ", ".join(top)
+        conn.execute(
+            "INSERT INTO tag_meta (name, description) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET description = ?",
+            (tag, desc, desc),
+        )
+        updated += 1
+    conn.commit()
+    conn.close()
+    print(f"[tag_desc] Updated {updated} tag_meta descriptions")
+    return updated
+
+
 def _parse_image_row(d):
     d["tags"] = json.loads(d["tags"]) if isinstance(d.get("tags"), str) else d.get("tags", [])
     d["palette"] = (

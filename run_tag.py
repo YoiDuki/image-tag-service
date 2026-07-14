@@ -1,6 +1,6 @@
 import sys
 import os
-from tag.database import init_db
+from tag.database import init_db, generate_tag_descriptions
 from tag.scanner import process_new_files, process_pending
 
 
@@ -11,6 +11,7 @@ def main():
         print("Usage:")
         print("  python run_tag.py scan <directory> [limit]")
         print("  python run_tag.py process [max_workers] [--force]")
+        print("  python run_tag.py gen-desc [top_n]")
         return
 
     command = sys.argv[1]
@@ -24,6 +25,9 @@ def main():
         args = [a for a in sys.argv[2:] if a != "--force"]
         max_workers = int(args[0]) if args else None
         process_pending(max_workers, force=force)
+    elif command == "gen-desc":
+        top_n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+        generate_tag_descriptions(top_n=top_n)
     else:
         print(f"Unknown command: {command}")
 

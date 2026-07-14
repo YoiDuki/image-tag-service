@@ -482,18 +482,18 @@ let searchTimer = $state(null)
           </div>
         {/if}
       </div>
-      <select bind:value={filters.nsfw} onchange={applyFilters} class="filter-select">
+      <select bind:value={filters.nsfw} onchange={(e) => { applyFilters(); e.target.blur() }} class="filter-select">
         <option value="">NSFW: All</option>
         <option value="no">No NSFW</option>
         <option value="yes">NSFW only</option>
       </select>
-      <select bind:value={filters.media_type} onchange={applyFilters} class="filter-select">
+      <select bind:value={filters.media_type} onchange={(e) => { applyFilters(); e.target.blur() }} class="filter-select">
         <option value="">Media: All</option>
         {#each filterOptions.media_types as m}
           <option value={m.name}>{m.name} ({m.count})</option>
         {/each}
       </select>
-      <select bind:value={filters.style} onchange={applyFilters} class="filter-select">
+      <select bind:value={filters.style} onchange={(e) => { applyFilters(); e.target.blur() }} class="filter-select">
         <option value="">Style: All</option>
         {#each filterOptions.styles as s}
           <option value={s.name}>{s.name} ({s.count})</option>
@@ -527,7 +527,7 @@ let searchTimer = $state(null)
         {/if}
       </div>
       <button class="filter-btn" onclick={resetFilters}>Reset</button>
-      <select bind:value={filters.sort} onchange={applyFilters} class="filter-select">
+      <select bind:value={filters.sort} onchange={(e) => { applyFilters(); e.target.blur() }} class="filter-select">
         <option value="updated_at">Sort: Updated</option>
         <option value="posted_at">Sort: Posted</option>
       </select>
