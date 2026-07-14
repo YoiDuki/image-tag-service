@@ -70,6 +70,10 @@ def _load_wd_tagger():
         print("[classifier] Loading WD tagger model (anime tagging)...")
         model_path, tags_path = _download_wd_model()
         ort = _get_ort()
+        import torch
+        torch_lib = os.path.join(os.path.dirname(torch.__file__), "lib")
+        if torch_lib not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = torch_lib + os.pathsep + os.environ.get("PATH", "")
         sess_opts = ort.SessionOptions()
         sess_opts.intra_op_num_threads = 2
         sess_opts.inter_op_num_threads = 1
