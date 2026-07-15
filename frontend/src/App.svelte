@@ -42,6 +42,7 @@
 let searchTimer = $state(null)
   let loading = $state(true)
   let selectedImage = $state(null)
+  let greyFilter = $state(false)
   let editingTags = $state('')
   let saving = $state(false)
   let allLoaded = $state(false)
@@ -827,7 +828,7 @@ let searchTimer = $state(null)
       </form>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5 overflow-hidden min-h-0 flex-1">
         <div class="flex flex-col min-h-0">
-          <div class="flex-1 min-h-0 relative overflow-hidden rounded-lg">
+          <div class="flex-1 min-h-0 relative overflow-hidden rounded-lg" class:grayscale={greyFilter}>
             <img src="/api/images/{selectedImage.filename}/file" alt={selectedImage.filename} class="w-full h-full object-contain absolute inset-0" />
           </div>
           {#if histogramLoading}
@@ -939,6 +940,7 @@ let searchTimer = $state(null)
               </button>
               <button class="btn btn-neutral btn-sm" onclick={() => handleRescan(selectedImage.filename)}>Rescan</button>
               <button class="btn btn-error btn-sm" onclick={() => handleDelete(selectedImage.filename)}>Delete</button>
+              <button class="btn btn-neutral btn-sm ml-auto" onclick={() => greyFilter = !greyFilter} class:btn-active={greyFilter}>Grey</button>
             </div>
             <div class="mt-2.5 border-t border-base-300 pt-2.5">
               <input type="text" bind:value={tagFilter} class="input input-bordered w-full text-xs mb-2" placeholder="Filter tags..." />
