@@ -611,11 +611,35 @@ def get_filters(author=None, media_type=None, style=None, tag=None, nsfw=None, s
     media_types = _get_counts("media_type", "media_type")
     styles = _get_counts("style", "style")
     tags = _get_counts("tags", "tag")
+    # raw_tags: same as tags but without synonym merge
+    where, params = _build_filter_where(
+        exclude="tag",
+        author=author, media_type=media_type, style=style,
+        tag=tag, nsfw=nsfw, search=search,
+    )
+    conn2 = get_conn()
+    raw_count = {}
+    for r in conn2.execute(f"SELECT tags FROM images {where}", params).fetchall():
+        if r["tags"]:
+            try:
+                lst = json.loads(r["tags"])
+                if isinstance(lst, list):
+                    for t in lst:
+                        if isinstance(t, str):
+                            raw_count[t] = raw_count.get(t, 0) + 1
+            except (json.JSONDecodeError, TypeError):
+                pass
+    conn2.close()
+    raw_tags = sorted(
+        [{"name": n, "count": c} for n, c in raw_count.items()],
+        key=lambda x: (-x["count"], x["name"]),
+    )
     return {
         "authors": authors,
         "media_types": media_types,
         "styles": styles,
         "tags": tags,
+        "raw_tags": raw_tags,
         "synonym_map": synonym_map,
     }
 

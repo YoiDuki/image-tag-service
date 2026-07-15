@@ -92,11 +92,15 @@ let searchTimer = $state(null)
   const resolvedTagNames = $derived(resolvedTagsAll.map(t => t.name))
 
   const rawTagNames = $derived(
-    filterOptions.tags.map(t => typeof t === 'string' ? t : t.name)
+    (filterOptions.raw_tags || filterOptions.tags).map(t => typeof t === 'string' ? t : t.name)
   )
 
   const rawTagNamesFiltered = $derived(
     tagFilter ? rawTagNames.filter(n => n.toLowerCase().includes(tagFilter.toLowerCase())) : rawTagNames
+  )
+
+  const rawTagCounts = $derived(
+    (filterOptions.raw_tags || filterOptions.tags).map(t => ({ name: typeof t === 'string' ? t : t.name, count: typeof t === 'string' ? 0 : (t.count || 0) }))
   )
 
   let tagSynonyms = $state([])
@@ -592,7 +596,7 @@ let searchTimer = $state(null)
           />
         {#if tagFilterFocused}
           <div class="tag-filter-dropdown">
-            {#each resolvedTagsAll.filter(t => !tagFilterText || t.name.toLowerCase().includes(tagFilterText.toLowerCase())).slice(0, 50) as t}
+            {#each rawTagCounts.filter(t => !tagFilterText || t.name.toLowerCase().includes(tagFilterText.toLowerCase())).slice(0, 50) as t}
               <button class="tag-filter-option" onmousedown={(e) => { e.preventDefault(); addTagFilter(t.name); tagFilterFocused = false; tagFilterText = ''; document.activeElement?.blur() }}>{t.name} ({t.count})</button>
             {/each}
           </div>
