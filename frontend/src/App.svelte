@@ -1,6 +1,25 @@
 <script>
   import { onMount } from 'svelte'
-  import { getImages, getImagesByColor, getStats, getFilters, updateImage, deleteImage, getTagsMeta, addTagMeta, updateTagMeta, deleteTagMeta, getTagSynonyms, addTagSynonym, deleteTagSynonym } from './lib/api.js'
+  import { getImages, getImagesByColor, getStats, getFilters, updateImage, deleteImage, getTagsMeta, addTagMeta, updateTagMeta, deleteTagMeta, getTagSynonyms, addTagSynonym, deleteTagSynonym, setImagesPending } from './lib/api.js'
+
+  const _CLIP_LABELS = [
+    { idx: 0, label: 'Photograph', isMedia: true, isMatch: (img) => img.media_type === 'photograph' },
+    { idx: 1, label: 'Illustration', isMedia: true, isMatch: (img) => img.media_type === 'illustration' },
+    { idx: 2, label: 'Manga', isMedia: true, isMatch: (img) => img.media_type === 'manga' },
+    { idx: 3, label: 'Tutorial', isMedia: true, isMatch: (img) => img.media_type === 'tutorial' },
+    { idx: 4, label: 'Portrait', isMatch: (img) => img.style === 'portrait' },
+    { idx: 5, label: 'Street', isMatch: (img) => img.style === 'street' },
+    { idx: 6, label: 'Landscape', isMatch: (img) => img.style === 'landscape' },
+    { idx: 7, label: 'Still Life', isMatch: (img) => img.style === 'still_life' },
+    { idx: 8, label: 'Animal', isMatch: (img) => img.style === 'animal' },
+    { idx: 9, label: 'Plants', isMatch: (img) => img.style === 'plants' },
+    { idx: 10, label: 'Anime', isMatch: (img) => img.style === 'anime' },
+    { idx: 11, label: 'Realistic', isMatch: (img) => img.style === 'realistic' },
+    { idx: 12, label: 'Rakugaki', isMatch: (img) => img.style === 'rakugaki' },
+    { idx: 13, label: 'Scenery', isMatch: (img) => img.style === 'scenery' },
+    { idx: 14, label: 'Colored Manga', isMatch: (img) => img.style === 'colored' },
+    { idx: 15, label: 'Monochrome Manga', isMatch: (img) => img.style === 'monochrome' },
+  ]
 
   let images = $state([])
   let stats = $state({ total: 0, pending: 0, done: 0, error: 0 })
@@ -9,13 +28,13 @@
     author: '',
     media_type: '',
     style: '',
-    tag: '',
+    tags: [],
     nsfw: '',
     search: '',
     sort: 'updated_at',
   })
   let colorPick = $state('#888888')
-  let colorThreshold = $state(100)
+  let colorThreshold = $state(30)
   let colorActive = $state(false)
   let page = $state(1)
   let pageInfo = $state({ page: 1, per_page: 24, total: 0, total_pages: 0 })
@@ -31,6 +50,7 @@ let searchTimer = $state(null)
   let rescanMode = $state(false)
   let selectedForRescan = $state(new Set())
   let rescanning = $state(false)
+  let loadedImgs = $state(new Set())
   let showTagManager = $state(false)
   let tagManagerTags = $state([])
   let tagManagerSearch = $state('')
@@ -39,6 +59,7 @@ let searchTimer = $state(null)
   let tagManagerEditing = $state(null)
   let tagManagerEditDesc = $state('')
   let tagFilterFocused = $state(false)
+  let tagFilterText = $state('')
   let authorFilterFocused = $state(false)
 
   const filteredAuthorOptions = $derived(
@@ -68,15 +89,15 @@ let searchTimer = $state(null)
     })()
   )
 
-  const resolvedTagsFiltered = $derived(
-    tagFilter
-      ? resolvedTagsAll.filter(t => t.name.toLowerCase().includes(tagFilter.toLowerCase()))
-      : resolvedTagsAll
-  )
-
   const resolvedTagNames = $derived(resolvedTagsAll.map(t => t.name))
 
-  const resolvedTagsFilteredNames = $derived(resolvedTagsFiltered.map(t => t.name))
+  const rawTagNames = $derived(
+    filterOptions.tags.map(t => typeof t === 'string' ? t : t.name)
+  )
+
+  const rawTagNamesFiltered = $derived(
+    tagFilter ? rawTagNames.filter(n => n.toLowerCase().includes(tagFilter.toLowerCase())) : rawTagNames
+  )
 
   let tagSynonyms = $state([])
   let synonymSearch = $state('')
@@ -149,7 +170,15 @@ let searchTimer = $state(null)
         const { r, g, b } = hexToRgb(colorPick)
         res = await getImagesByColor(r, g, b, colorThreshold, 1)
       } else {
-        res = await getImages({ ...filters, search }, 1)
+        const apiFilters = {}
+        for (const [k, v] of Object.entries(filters)) {
+          if (k === 'tags') {
+            if (v.length) apiFilters.tag = v.join(',')
+          } else if (v) {
+            apiFilters[k] = v
+          }
+        }
+        res = await getImages({ ...apiFilters, search }, 1)
       }
       images = res.images
       pageInfo = res
@@ -172,7 +201,15 @@ let searchTimer = $state(null)
         const { r, g, b } = hexToRgb(colorPick)
         res = await getImagesByColor(r, g, b, colorThreshold, next)
       } else {
-        res = await getImages({ ...filters, search }, next)
+        const apiFilters = {}
+        for (const [k, v] of Object.entries(filters)) {
+          if (k === 'tags') {
+            if (v.length) apiFilters.tag = v.join(',')
+          } else if (v) {
+            apiFilters[k] = v
+          }
+        }
+        res = await getImages({ ...apiFilters, search }, next)
       }
       images = [...images, ...res.images]
       pageInfo = res
@@ -182,6 +219,13 @@ let searchTimer = $state(null)
       console.error('Failed to load more:', e)
     } finally {
       loadingMore = false
+      // If sentinel still visible after load, keep loading
+      if (!allLoaded && sentinelEl) {
+        const rect = sentinelEl.getBoundingClientRect()
+        if (rect.top < window.innerHeight + 400) {
+          loadMore()
+        }
+      }
     }
   }
 
@@ -195,7 +239,14 @@ let searchTimer = $state(null)
 
   async function loadFilterOptions() {
     try {
-      filterOptions = await getFilters()
+      filterOptions = await getFilters({
+        author: filters.author || undefined,
+        media_type: filters.media_type || undefined,
+        style: filters.style || undefined,
+        tag: filters.tags.length ? filters.tags.join(',') : undefined,
+        nsfw: filters.nsfw || undefined,
+        search: search || undefined,
+      })
     } catch (e) {
       console.error('Failed to load filters:', e)
     }
@@ -212,6 +263,7 @@ let searchTimer = $state(null)
     searchTimer = setTimeout(() => {
       page = 1
       loadImages()
+      loadFilterOptions()
     }, 300)
   }
 
@@ -220,12 +272,14 @@ let searchTimer = $state(null)
     if (searchTimer) clearTimeout(searchTimer)
     page = 1
     loadImages()
+    loadFilterOptions()
   }
 
   function applyFilters() {
     colorActive = false
     page = 1
     loadImages()
+    loadFilterOptions()
   }
 
   function applyColor(e) {
@@ -259,7 +313,7 @@ let searchTimer = $state(null)
   })
 
   function resetFilters() {
-    filters = { author: '', media_type: '', style: '', tag: '', nsfw: '', sort: 'updated_at' }
+    filters = { author: '', media_type: '', style: '', tags: [], nsfw: '', sort: 'updated_at' }
     if (searchTimer) clearTimeout(searchTimer)
     search = ''
     colorActive = false
@@ -267,7 +321,29 @@ let searchTimer = $state(null)
     loadImages()
   }
 
+  function addTagFilter(t) {
+    if (!filters.tags.includes(t)) {
+      filters.tags = [...filters.tags, t]
+      applyFilters()
+    }
+  }
 
+  function removeTagFilter(t) {
+    filters.tags = filters.tags.filter(x => x !== t)
+    applyFilters()
+  }
+
+  function filterByTag(t) {
+    addTagFilter(t)
+  }
+
+  function filterByColor(hex) {
+    filters.tags = []
+    colorPick = hex
+    colorActive = true
+    page = 1
+    loadImages()
+  }
 
   function openDetail(img) {
     selectedImage = img
@@ -353,6 +429,23 @@ let searchTimer = $state(null)
     selectedForRescan = next
   }
 
+  async function selectAllFiltered() {
+    const activeFilters = {
+      author: filters.author || undefined,
+      media_type: filters.media_type || undefined,
+      style: filters.style || undefined,
+      tag: filters.tags.length ? filters.tags.join(',') : undefined,
+      nsfw: filters.nsfw || undefined,
+      search: search || undefined,
+    }
+    const res = await setImagesPending(activeFilters)
+    rescanMode = false
+    selectedForRescan = new Set()
+    await loadImages()
+    await loadStats()
+    alert(`Set ${res.affected} image(s) to pending. Run 'python run_tag.py process' to process.`)
+  }
+
   async function startRescan() {
     if (selectedForRescan.size === 0) return
     rescanning = true
@@ -379,18 +472,6 @@ let searchTimer = $state(null)
   function formatDate(s) {
     if (!s) return ''
     return s.length > 10 ? s.slice(0, 10) : s
-  }
-
-  function paletteStyle(palette) {
-    if (!palette || !palette.length) return ''
-    const stops = palette
-      .map((c, i) => {
-        const pos = (i / palette.length) * 100
-        const nextPos = ((i + 1) / palette.length) * 100
-        return `${c.hex} ${pos}% ${nextPos}%`
-      })
-      .join(', ')
-    return `background: linear-gradient(to right, ${stops})`
   }
 
   let tagFilter = $state('')
@@ -449,7 +530,7 @@ let searchTimer = $state(null)
           {rescanMode ? 'Cancel' : 'Rescan'}
         </button>
         {#if rescanMode}
-          <button class="filter-btn" onclick={() => selectedForRescan = new Set(images.map(i => i.filename))}>Select All</button>
+          <button class="filter-btn" onclick={selectAllFiltered}>Select All ({pageInfo.total})</button>
           <button class="filter-btn primary" onclick={startRescan} disabled={rescanning || selectedForRescan.size === 0}>
             {rescanning ? 'Processing...' : `Start (${selectedForRescan.size})`}
           </button>
@@ -500,28 +581,19 @@ let searchTimer = $state(null)
         {/each}
       </select>
       <div class="tag-filter-wrap">
-        {#if filters.tag === '__no_tag__'}
-          <span class="tag-filter-no-tag">Tag: No Tag</span>
-          <button class="tag-filter-clear" onclick={() => { filters.tag = ''; applyFilters() }}>✕</button>
-        {:else}
           <input
             type="text"
-            bind:value={filters.tag}
+            bind:value={tagFilterText}
             onfocus={() => tagFilterFocused = true}
-            onblur={() => setTimeout(() => tagFilterFocused = false, 150)}
-            oninput={applyFilters}
-            placeholder="Tag: All"
+            onblur={() => setTimeout(() => tagFilterFocused = false, 200)}
+            oninput={() => tagFilterFocused = true}
+            placeholder="Tag: Search / Click card to filter"
             class="filter-select tag-filter-input"
           />
-          {#if filters.tag}
-            <button class="tag-filter-clear" onclick={() => { filters.tag = ''; applyFilters() }}>✕</button>
-          {/if}
-        {/if}
         {#if tagFilterFocused}
           <div class="tag-filter-dropdown">
-            <button class="tag-filter-option" onmousedown={() => { filters.tag = '__no_tag__'; applyFilters(); tagFilterFocused = false; document.activeElement?.blur() }}>No Tag</button>
-            {#each resolvedTagsAll.filter(t => !filters.tag || t.name.toLowerCase().includes(filters.tag.toLowerCase())).slice(0, 50) as t}
-              <button class="tag-filter-option" onmousedown={() => { filters.tag = t.name; applyFilters(); tagFilterFocused = false; document.activeElement?.blur() }}>{t.name} ({t.count})</button>
+            {#each resolvedTagsAll.filter(t => !tagFilterText || t.name.toLowerCase().includes(tagFilterText.toLowerCase())).slice(0, 50) as t}
+              <button class="tag-filter-option" onmousedown={(e) => { e.preventDefault(); addTagFilter(t.name); tagFilterFocused = false; tagFilterText = ''; document.activeElement?.blur() }}>{t.name} ({t.count})</button>
             {/each}
           </div>
         {/if}
@@ -568,6 +640,17 @@ let searchTimer = $state(null)
     </div>
   </div>
 
+  {#if filters.tags.length}
+    <div class="tag-chips">
+      {#each filters.tags as t}
+        <span class="tag-chip">
+          {synonymMap[t] || t}
+          <button class="tag-chip-x" onclick={() => removeTagFilter(t)}>✕</button>
+        </span>
+      {/each}
+    </div>
+  {/if}
+
   {#if loading}
     <div class="loading">Loading...</div>
   {:else if images.length === 0}
@@ -585,7 +668,16 @@ let searchTimer = $state(null)
           onkeydown={(e) => e.key === 'Enter' && (rescanMode ? toggleSelect(img.filename) : openDetail(img))}
         >
           <div class="card-thumb">
-            <img src="/api/images/{img.filename}/file" alt={img.filename} loading="lazy" />
+            {#if !loadedImgs.has(img.filename)}
+              <div class="img-placeholder"></div>
+            {/if}
+            <img
+              src="/api/images/{img.filename}/file"
+              alt={img.filename}
+              loading="lazy"
+              onload={() => loadedImgs = new Set([...loadedImgs, img.filename])}
+              class:img-hidden={!loadedImgs.has(img.filename)}
+            />
             <span class="nsfw-overlay">{nsfwBadge(img.nsfw)}</span>
             {#if rescanMode}
               <span class="check-overlay">{selectedForRescan.has(img.filename) ? '✓' : ''}</span>
@@ -605,16 +697,28 @@ let searchTimer = $state(null)
                 <span class="badge-edited">edited</span>
               {/if}
               {#if nsfwBadge(img.nsfw)}<span class="badge-nsfw">NSFW</span>{/if}
-              <span class="media-type" class:type-photo={img.media_type === 'photograph'} class:type-illust={img.media_type === 'illustration'}>{img.media_type}</span>
+              <span class="media-type" class:type-photo={img.media_type === 'photograph'} class:type-illust={img.media_type === 'illustration'} class:type-manga={img.media_type === 'manga'} class:type-tutorial={img.media_type === 'tutorial'}>{img.media_type}</span>
               {#if img.style}<span class="media-type style-tag">{img.style}</span>{/if}
             </div>
             {#if img.palette?.length}
-              <div class="palette-bar" style={paletteStyle(img.palette)}></div>
+              <div class="palette-bar">
+                {#each img.palette as c}
+                  <span
+                    class="palette-swatch"
+                    role="button"
+                    tabindex="0"
+                    style="background:{c.hex}"
+                    title="{c.hex} (click to filter)"
+                    onclick={(e) => { e.stopPropagation(); filterByColor(c.hex) }}
+                    onkeydown={(e) => e.key === 'Enter' && filterByColor(c.hex)}
+                  ></span>
+                {/each}
+              </div>
             {/if}
             {#if img.tags?.length}
               <div class="card-tags">
-                {#each [...new Set(img.tags.slice(0, 4).map(t => resolveTag(typeof t === 'string' ? t : t.label)))] as t}
-                  <span class="tag content">{t}</span>
+                {#each [...new Set(img.tags.filter(t => !/_(hair|eyes|skin)$/i.test(typeof t === 'string' ? t : t.label)).slice(0, 4).map(t => ({ eng: typeof t === 'string' ? t : t.label, cn: img.displayed_tags?.[img.tags.indexOf(t)] || resolveTag(typeof t === 'string' ? t : t.label) })))] as { eng, cn }}
+                  <span class="tag content tag-clickable" role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); filterByTag(eng) }} onkeydown={(e) => e.key === 'Enter' && filterByTag(eng)}>{cn}</span>
                 {/each}
               </div>
             {/if}
@@ -653,13 +757,14 @@ let searchTimer = $state(null)
           <p><strong>Status:</strong> <span class={statusClass(selectedImage.status)}>{selectedImage.status}</span></p>
           <p><strong>Media:</strong>
             <select bind:value={selectedImage.media_type} onchange={() => updateField(selectedImage.filename, 'media_type', selectedImage.media_type)} class="detail-select">
-              {#each ['photograph', 'illustration', 'manga', 'unknown'] as mt}
+              <option value="">—</option>
+              {#each ['photograph', 'illustration', 'manga', 'tutorial', 'unknown'] as mt}
                 <option value={mt}>{mt}</option>
               {/each}
             </select>
-            <select bind:value={selectedImage.style} onchange={() => updateField(selectedImage.filename, 'style', selectedImage.style || null)} class="detail-select">
+            <select bind:value={selectedImage.style} onchange={() => updateField(selectedImage.filename, 'style', selectedImage.style)} class="detail-select">
               <option value="">—</option>
-              {#each ['realistic', 'manga', 'color_illustration', 'monochrome', 'colored', 'landscape', 'portrait', 'street', 'still_life', 'animal', 'plants'] as st}
+              {#each ['portrait', 'street', 'landscape', 'still_life', 'animal', 'plants', 'anime', 'realistic', 'rakugaki', 'scenery', 'colored', 'monochrome'] as st}
                 <option value={st}>{st}</option>
               {/each}
             </select>
@@ -670,12 +775,42 @@ let searchTimer = $state(null)
               <option value="yes">Yes</option>
             </select>
           </p>
-          <p><strong>Author:</strong> {selectedImage.author_username || '-'}</p>
+          <p>
+            <strong>Author:</strong>
+            {#if selectedImage.author_username}
+              <a href="https://x.com/{selectedImage.author_username}" target="_blank" rel="noopener noreferrer">@{selectedImage.author_username}</a>
+            {:else}
+              -
+            {/if}
+          </p>
           <p><strong>Posted:</strong> {selectedImage.posted_at || '-'}</p>
         </div>
 
         {#if selectedImage.palette?.length}
-          <div class="palette-bar large" style={paletteStyle(selectedImage.palette)}></div>
+          <div class="palette-bar large">
+            {#each selectedImage.palette as c}
+              <span
+                class="palette-swatch"
+                style="background:{c.hex}"
+                title="{c.hex}"
+              ></span>
+            {/each}
+          </div>
+        {/if}
+
+        {#if selectedImage.clip_scores?.length}
+          <div class="section">
+            <h3>CLIP Scores</h3>
+            <div class="clip-scores">
+              {#each _CLIP_LABELS as item}
+                {#if selectedImage.clip_scores[item.idx] > 0.01}
+                  <span class="clip-score" class:highlight={item.isMedia || item.isMatch(selectedImage)}>
+                    {item.label}: {(selectedImage.clip_scores[item.idx] * 100).toFixed(1)}%
+                  </span>
+                {/if}
+              {/each}
+            </div>
+          </div>
         {/if}
 
         {#if selectedImage.artists?.length}
@@ -713,7 +848,7 @@ let searchTimer = $state(null)
           <div class="tag-picker">
             <input type="text" bind:value={tagFilter} class="tag-picker-search" placeholder="Filter tags..." />
             <div class="tag-picker-list">
-              {#each resolvedTagsFilteredNames as tag}
+              {#each rawTagNamesFiltered as tag}
                 <button
                   class="tag-pick-btn"
                   class:in-list={currentTags.includes(tag)}
@@ -972,6 +1107,17 @@ let searchTimer = $state(null)
     height: 100%;
     object-fit: cover;
   }
+  .img-placeholder {
+    position: absolute;
+    inset: 0;
+    background: #1a1a2e;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  .img-hidden { opacity: 0; }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+  }
   .nsfw-overlay {
     position: absolute;
     top: 6px;
@@ -998,6 +1144,8 @@ let searchTimer = $state(null)
   .media-type { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
   .media-type.type-photo { color: #5bc0de; background: #1a2a3a; }
   .media-type.type-illust { color: #b8a0e8; background: #2a1a3a; }
+  .media-type.type-manga { color: #f0c040; background: #2a2a1a; }
+  .media-type.type-tutorial { color: #40e0a0; background: #1a2a2a; }
   .media-type.style-tag { color: #c9a0ff; background: #2a1a3a; }
 
   .badge-done { color: #5cb85c; font-size: 11px; font-weight: 600; text-transform: uppercase; }
@@ -1018,13 +1166,41 @@ let searchTimer = $state(null)
   .card-date { color: #555 !important; }
 
   .palette-bar {
+    display: flex;
+    gap: 2px;
     height: 6px;
-    border-radius: 3px;
     margin-bottom: 6px;
   }
-  .palette-bar.large { height: 10px; margin-bottom: 12px; }
+  .palette-bar.large { height: 10px; margin-bottom: 12px; gap: 3px; }
+  .palette-swatch {
+    flex: 1;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .palette-swatch:hover {
+    transform: scaleY(2);
+    box-shadow: 0 0 6px rgba(255,255,255,0.4);
+    z-index: 1;
+  }
+  .palette-bar.large .palette-swatch:hover {
+    transform: scaleY(1.5);
+  }
 
   .card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+  .tag-clickable { cursor: pointer; }
+  .tag-clickable:hover { background: #444; color: #fff; }
+  .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 4px; }
+  .tag-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12px; padding: 3px 8px; border-radius: 12px;
+    background: #2a4a6a; color: #8cf;
+  }
+  .tag-chip-x {
+    background: none; border: none; color: #8cf; cursor: pointer;
+    font-size: 14px; padding: 0; line-height: 1;
+  }
+  .tag-chip-x:hover { color: #fff; }
   .tag {
     font-size: 10px;
     padding: 2px 6px;
@@ -1213,6 +1389,10 @@ let searchTimer = $state(null)
     color: #fff;
     border-color: #2a6eff;
   }
+
+  .clip-scores { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .clip-score { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #1a1a2e; color: #888; }
+  .clip-score.highlight { background: #2a4a3a; color: #5ae0a0; }
 
   .tag-filter-wrap { position: relative; }
   .tag-filter-input { width: 120px; }

@@ -4,7 +4,7 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from tag.database import init_db, get_all_images, get_filters, search_by_color, upsert_image, image_exists, get_conn, get_tag_meta, upsert_tag_meta, delete_tag_meta, get_tag_synonyms, add_tag_synonym, delete_tag_synonym
+from tag.database import init_db, get_all_images, get_filters, search_by_color, upsert_image, image_exists, get_conn, get_tag_meta, upsert_tag_meta, delete_tag_meta, get_tag_synonyms, add_tag_synonym, delete_tag_synonym, set_images_pending
 
 init_db()
 
@@ -47,8 +47,18 @@ def list_images(
 
 
 @app.get("/api/filters")
-def filters():
-    return get_filters()
+def filters_endpoint(
+    author: str = Query(None),
+    media_type: str = Query(None),
+    style: str = Query(None),
+    tag: str = Query(None),
+    nsfw: str = Query(None),
+    search: str = Query(None),
+):
+    return get_filters(
+        author=author, media_type=media_type, style=style,
+        tag=tag, nsfw=nsfw, search=search,
+    )
 
 
 @app.get("/api/images/color")
@@ -61,6 +71,24 @@ def search_color_endpoint(
     per_page: int = Query(24, ge=1, le=200),
 ):
     return search_by_color(r, g, b, threshold, page, per_page)
+
+
+class SetPendingFilter(BaseModel):
+    status: str | None = None
+    author: str | None = None
+    media_type: str | None = None
+    style: str | None = None
+    tag: str | None = None
+    nsfw: str | None = None
+    search: str | None = None
+
+
+@app.put("/api/images/set-pending")
+def set_pending_endpoint(f: SetPendingFilter):
+    return set_images_pending(
+        status=f.status, author=f.author, media_type=f.media_type,
+        style=f.style, tag=f.tag, nsfw=f.nsfw, search=f.search,
+    )
 
 
 @app.get("/api/images/{filename}/file")
@@ -81,7 +109,7 @@ def serve_image(filename: str):
 @app.get("/api/images/{filename}")
 def get_image(filename: str):
     conn = get_conn()
-    _COLS = "id, filename, filepath, tags, artists, characters, media_type, style, nsfw, status, error, palette, author_username, posted_at, created_at, updated_at, tags_edited"
+    _COLS = "id, filename, filepath, tags, artists, characters, media_type, style, nsfw, status, error, palette, author_username, posted_at, created_at, updated_at, tags_edited, clip_scores, clip_tags"
     row = conn.execute(
         f"SELECT {_COLS} FROM images WHERE filename = ?", (filename,)
     ).fetchone()
@@ -89,9 +117,12 @@ def get_image(filename: str):
     if row is None:
         raise HTTPException(404, "not found")
     d = dict(row)
-    for field in ("tags", "palette", "artists", "characters"):
+    for field in ("tags", "palette", "artists", "characters", "clip_scores", "clip_tags"):
         if isinstance(d.get(field), str):
             d[field] = json.loads(d[field])
+    from tag.database import get_synonym_map
+    sm = get_synonym_map()
+    d["displayed_tags"] = [sm.get(t, t) for t in (d.get("tags") or [])]
     return d
 
 
@@ -108,6 +139,8 @@ class ImageUpdate(BaseModel):
     status: str | None = None
     error: str | None = None
     filepath: str | None = None
+    clip_scores: list | None = None
+    clip_tags: dict | None = None
 
 
 @app.put("/api/images/{filename}")
@@ -122,7 +155,9 @@ def update_image_endpoint(filename: str, data: ImageUpdate):
     set_clauses = []
     params = []
     for key, value in update_data.items():
-        if key in ("tags", "artists", "characters", "palette"):
+        if key in ("tags", "artists", "characters", "palette", "clip_scores"):
+            value = json.dumps(value)
+        elif key == "clip_tags":
             value = json.dumps(value)
         elif key == "nsfw":
             value = "yes" if value else "no"

@@ -163,22 +163,27 @@ def _load_clip():
 
 
 _PROMPTS = [
-    "a photograph taken by a camera, real world scene",
-    "a digital illustration, painting, drawing, animation artwork",
-    "anime style, Japanese animation style",
-    "non-anime, western animation, realistic live action",
-    "photorealistic digital painting, oil painting, realistic rendering",
-    "manga style, comic style, cel shading, screentone, lineart",
-    "color illustration, light novel style, vibrant anime artwork",
-    "landscape photography, nature scenery, mountain ocean forest",
-    "portrait photography, a person, people, human face",
-    "street photography, urban cityscape, buildings, street",
-    "still life photography, object, food, product on table",
-    "animal photography, mammal, bird, wildlife, pet",
-    "plant photography, botanical, garden, leaves, flowers",
+    # Media type (0-3)
+    "a photograph taken by a camera, real world scene, realistic lighting and texture",
+    "a digital illustration, painting, drawing, artwork, creative illustration",
+    "a manga panel, comic page, sequential art with speech bubbles, comic strip, storyboard",
+    "a tutorial, educational guide, step by step instruction, software screenshot, drawing tutorial, workflow demonstration",
+    # Photo style (4-9)
+    "portrait photography, a person, people, human face, model shoot",
+    "street photography, urban cityscape, buildings, street scene, candid",
+    "landscape photography, nature scenery, mountain ocean forest, wide view",
+    "still life photography, object, food, product on table, arranged composition",
+    "animal photography, mammal, bird, wildlife, pet, animal portrait",
+    "plant photography, botanical, garden, leaves, flowers, nature close up",
+    # Illustration style (10-13)
+    "anime style, Japanese animation, vibrant anime artwork, cel shaded",
+    "realistic digital painting, oil painting, semi realistic, detailed rendering",
+    "rakugaki, doodle, rough sketch, casual drawing, quick sketch, line art",
+    "scenery illustration, background art, environment design, landscape painting",
+    # Manga style (14-15)
+    "colored manga, color comic page, colored comic panel, colorful manga art",
+    "monochrome manga, black and white comic, greyscale manga, ink drawing",
 ]
-
-_PHOTO_LABELS = ["landscape", "portrait", "street", "still_life", "animal", "plants"]
 
 _CLIP_TAG_PROMPTS = {}
 _CLIP_TAG_EMBEDDINGS = None
@@ -243,26 +248,27 @@ def _classify_media(image_path):
 
     scores = sim[0].cpu().tolist()
 
-    photo_score, illust_score = scores[0], scores[1]
-    r_score, m_score, c_score = scores[4], scores[5], scores[6]
-    l_score, p_score, s_score, st_score, a_score, f_score = scores[7:13]
-
-    if m_score > photo_score and m_score > illust_score:
-        media_type = "manga"
-    else:
-        media_type = "photograph" if photo_score > illust_score else "illustration"
+    # Media type (indices 0-3)
+    media_scores = [scores[0], scores[1], scores[2], scores[3]]
+    media_labels = ["photograph", "illustration", "manga", "tutorial"]
+    media_type = media_labels[media_scores.index(max(media_scores))]
 
     style = None
-    if media_type == "manga":
-        mono = _is_monochrome(image_path)
-        style = "monochrome" if mono else "colored"
-    elif media_type == "illustration":
-        style_scores = [r_score, c_score]
-        style_labels = ["realistic", "color_illustration"]
+    if media_type == "photograph":
+        style_scores = scores[4:10]
+        style_labels = ["portrait", "street", "landscape", "still_life", "animal", "plants"]
         style = style_labels[style_scores.index(max(style_scores))]
-    else:
-        photo_scores = [l_score, p_score, s_score, st_score, a_score, f_score]
-        style = _PHOTO_LABELS[photo_scores.index(max(photo_scores))]
+    elif media_type == "illustration":
+        style_scores = scores[10:14]
+        style_labels = ["anime", "realistic", "rakugaki", "scenery"]
+        style = style_labels[style_scores.index(max(style_scores))]
+    elif media_type == "manga":
+        if _is_monochrome(image_path):
+            style = "monochrome"
+        else:
+            style_scores = scores[14:16]
+            style = "colored" if style_scores[0] >= style_scores[1] else "monochrome"
+    # tutorial: no style
 
     clip_tags = {}
     for i, name in enumerate(_CLIP_TAG_PROMPTS):
@@ -276,6 +282,7 @@ def _classify_media(image_path):
         "media_type": media_type,
         "style": style,
         "clip_tags": clip_tags,
+        "scores": scores,
     }
 
 
@@ -359,6 +366,7 @@ def classify_image(image_path, existing_palette=None):
         "multiple_girls", "multiple_boys", "group",
         "2girls", "3girls", "4girls", "5girls", "6+girls",
         "2boys", "3boys", "4boys", "5boys", "6+boys",
+        "blue_skin",
     }
 
     artists = [
@@ -389,4 +397,6 @@ def classify_image(image_path, existing_palette=None):
         "palette": palette,
         "artists": artists,
         "characters": characters,
+        "clip_scores": media["scores"],
+        "clip_tags": media["clip_tags"],
     }

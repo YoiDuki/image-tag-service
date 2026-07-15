@@ -113,6 +113,8 @@ def _process_one(item):
             author_username=author_username,
             posted_at=posted_at,
             status="done",
+            clip_scores=result.get("clip_scores"),
+            clip_tags=result.get("clip_tags"),
         )
     except Exception as e:
         _print(f"[scanner]  ERROR: {fname} - {e}")

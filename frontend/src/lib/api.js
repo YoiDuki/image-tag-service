@@ -23,8 +23,13 @@ export function getImages(filters = {}, page = 1, perPage = 24) {
 	return request(`/images${qs ? `?${qs}` : ""}`);
 }
 
-export function getFilters() {
-	return request("/filters");
+export function getFilters(filters = {}) {
+	const params = new URLSearchParams();
+	for (const [k, v] of Object.entries(filters)) {
+		if (v) params.append(k, v);
+	}
+	const qs = params.toString();
+	return request(`/filters${qs ? `?${qs}` : ""}`);
 }
 
 export function getImagesByColor(
@@ -105,5 +110,12 @@ export function addTagSynonym(synonym, canonical) {
 export function deleteTagSynonym(synonym) {
 	return request(`/tag-synonyms/${encodeURIComponent(synonym)}`, {
 		method: "DELETE",
+	});
+}
+
+export function setImagesPending(filters = {}) {
+	return request("/images/set-pending", {
+		method: "PUT",
+		body: JSON.stringify(filters),
 	});
 }
