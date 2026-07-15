@@ -1,1 +1,14 @@
-/* styles are in App.svelte */
+@import "tailwindcss";
+@plugin "daisyui";
+
+[data-theme="light"] {
+  --color-base-100: #f5f5f0;
+  --color-base-200: #e8e8e3;
+  --color-base-300: #d6d6d1;
+  --color-neutral: #2a2a2a;
+  --color-neutral-content: #f5f5f0;
+}
+[data-theme="light"] .badge-ghost {
+  background-color: var(--color-base-300);
+  border-color: var(--color-base-300);
+}

@@ -58,9 +58,53 @@ let searchTimer = $state(null)
   let tagManagerDesc = $state('')
   let tagManagerEditing = $state(null)
   let tagManagerEditDesc = $state('')
-  let tagFilterFocused = $state(false)
   let tagFilterText = $state('')
+  let tagFilterFocused = $state(false)
   let authorFilterFocused = $state(false)
+  let authorInputEl = $state(null)
+  let tagFilterInputEl = $state(null)
+  let authorDropdownStyle = $state('')
+  let tagDropdownStyle = $state('')
+
+  function positionAuthorDropdown() {
+    authorFilterFocused = true
+    updateAuthorDropdownPos()
+  }
+
+  function updateAuthorDropdownPos() {
+    if (!authorInputEl || !authorFilterFocused) return
+    const r = authorInputEl.getBoundingClientRect()
+    const maxH = Math.min(240, window.innerHeight - r.bottom - 16)
+    authorDropdownStyle = `top:${r.bottom + 4}px;left:${r.left}px;min-width:${Math.max(128, r.width)}px;max-height:${maxH}px;`
+  }
+
+  function positionTagDropdown() {
+    tagFilterFocused = true
+    updateTagDropdownPos()
+  }
+
+  function updateTagDropdownPos() {
+    if (!tagFilterInputEl || !tagFilterFocused) return
+    const r = tagFilterInputEl.getBoundingClientRect()
+    const maxH = Math.min(240, window.innerHeight - r.bottom - 16)
+    tagDropdownStyle = `top:${r.bottom + 4}px;left:${r.left}px;min-width:${Math.max(128, r.width)}px;max-height:${maxH}px;`
+  }
+
+  $effect(() => {
+    if (authorFilterFocused) {
+      const handler = () => updateAuthorDropdownPos()
+      window.addEventListener('scroll', handler, { passive: true })
+      return () => window.removeEventListener('scroll', handler)
+    }
+  })
+
+  $effect(() => {
+    if (tagFilterFocused) {
+      const handler = () => updateTagDropdownPos()
+      window.addEventListener('scroll', handler, { passive: true })
+      return () => window.removeEventListener('scroll', handler)
+    }
+  })
 
   const filteredAuthorOptions = $derived(
     filters.author
@@ -518,105 +562,113 @@ let searchTimer = $state(null)
   )
 </script>
 
-<main>
-  <header>
-    <h1>Image Tag Service</h1>
-    <div class="header-actions">
-      <div class="stats">
-        {#if pageInfo.total > 0}<span class="stat filtered">Filtered: {pageInfo.total}</span>{/if}
-        <span class="stat">Total: {stats.total}</span>
-        <span class="stat pending">Pending: {stats.pending}</span>
-        <span class="stat done">Done: {stats.done}</span>
-        <span class="stat error">Error: {stats.error}</span>
+<main class="max-w-[1400px] mx-auto p-5 overflow-x-hidden">
+  <div class="navbar mb-5 gap-4 flex-wrap">
+    <div class="flex-1">
+      <h1 class="text-2xl font-bold text-base-content">Image Tag Service</h1>
+    </div>
+    <div class="flex items-center gap-4 flex-wrap">
+      <div class="flex gap-4 text-sm">
+        {#if pageInfo.total > 0}<span class="badge badge-ghost badge-sm text-primary">Filtered: {pageInfo.total}</span>{/if}
+        <span class="badge badge-ghost badge-sm">Total: {stats.total}</span>
+        <span class="badge badge-ghost badge-sm text-warning">Pending: {stats.pending}</span>
+        <span class="badge badge-ghost badge-sm text-success">Done: {stats.done}</span>
+        <span class="badge badge-ghost badge-sm text-error">Error: {stats.error}</span>
       </div>
-      <div class="header-buttons">
-        <button class="filter-btn" class:active={rescanMode} onclick={toggleRescanMode}>
+      <div class="flex gap-1">
+        <button class="btn btn-sm btn-neutral" class:btn-primary={rescanMode} onclick={toggleRescanMode}>
           {rescanMode ? 'Cancel' : 'Rescan'}
         </button>
         {#if rescanMode}
-          <button class="filter-btn" onclick={selectAllFiltered}>Select All ({pageInfo.total})</button>
-          <button class="filter-btn primary" onclick={startRescan} disabled={rescanning || selectedForRescan.size === 0}>
+          <button class="btn btn-sm btn-primary" onclick={selectAllFiltered}>Select All ({pageInfo.total})</button>
+          <button class="btn btn-sm btn-primary" onclick={startRescan} disabled={rescanning || selectedForRescan.size === 0}>
             {rescanning ? 'Processing...' : `Start (${selectedForRescan.size})`}
           </button>
         {/if}
-        <button class="filter-btn" onclick={() => { showTagManager = true; tagManagerSearch = ''; synonymSearch = ''; loadTagManager(); loadSynonyms() }}>Manage Tags</button>
+        <button class="btn btn-sm btn-neutral" onclick={() => { showTagManager = true; tagManagerSearch = ''; synonymSearch = ''; loadTagManager(); loadSynonyms() }}>Manage Tags</button>
       </div>
     </div>
-  </header>
+  </div>
 
-  <div class="toolbar">
-    <div class="filters">
-      <div class="tag-filter-wrap">
+  <div class="flex gap-1 mb-5 px-[5px] pb-[5px] pt-[7px] flex-wrap items-center">
+      <div class="inline-block relative">
         <input
           type="text"
           bind:value={filters.author}
-          onfocus={() => authorFilterFocused = true}
+          bind:this={authorInputEl}
+          onfocus={positionAuthorDropdown}
           onblur={() => setTimeout(() => authorFilterFocused = false, 150)}
           oninput={applyFilters}
           placeholder="Author: All"
-          class="filter-select tag-filter-input"
+          class="input input-bordered input-sm w-32"
         />
         {#if filters.author}
-          <button class="tag-filter-clear" onclick={() => { filters.author = ''; applyFilters() }}>✕</button>
-        {/if}
-        {#if authorFilterFocused && filteredAuthorOptions.length > 0}
-          <div class="tag-filter-dropdown">
-            {#each filteredAuthorOptions.slice(0, 50) as a}
-              <button class="tag-filter-option" onmousedown={() => { filters.author = a.name; applyFilters(); authorFilterFocused = false; document.activeElement?.blur() }}>{a.name} ({a.count})</button>
-            {/each}
-          </div>
+          <button class="absolute right-1 top-1/2 -translate-y-1/2 btn btn-neutral btn-xs px-1 min-h-0 h-auto text-base-content/40" onclick={() => { filters.author = ''; applyFilters() }}>✕</button>
         {/if}
       </div>
-      <select bind:value={filters.nsfw} onchange={(e) => { applyFilters(); e.target.blur() }} class="filter-select">
+      {#if authorFilterFocused && filteredAuthorOptions.length > 0}
+        <div style={authorDropdownStyle} class="fixed z-[99999] flex flex-col p-2 shadow bg-base-200 rounded-box overflow-y-auto overflow-x-hidden dropdown-scroll">
+          {#each filteredAuthorOptions.slice(0, 50) as a}
+            <button class="block w-full text-left px-2.5 py-1.5 text-xs text-base-content hover:bg-base-300 cursor-pointer bg-none border-none" onmousedown={() => { filters.author = a.name; applyFilters(); authorFilterFocused = false; document.activeElement?.blur() }}>{a.name} ({a.count})</button>
+          {/each}
+        </div>
+      {/if}
+
+      <select bind:value={filters.nsfw} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-28">
         <option value="">NSFW: All</option>
         <option value="no">No NSFW</option>
         <option value="yes">NSFW only</option>
       </select>
-      <select bind:value={filters.media_type} onchange={(e) => { applyFilters(); e.target.blur() }} class="filter-select">
+      <select bind:value={filters.media_type} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-28">
         <option value="">Media: All</option>
         {#each filterOptions.media_types as m}
           <option value={m.name}>{m.name} ({m.count})</option>
         {/each}
       </select>
-      <select bind:value={filters.style} onchange={(e) => { applyFilters(); e.target.blur() }} class="filter-select">
+      <select bind:value={filters.style} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-28">
         <option value="">Style: All</option>
         {#each filterOptions.styles as s}
           <option value={s.name}>{s.name} ({s.count})</option>
         {/each}
       </select>
-      <div class="tag-filter-wrap">
-          <input
-            type="text"
-            bind:value={tagFilterText}
-            onfocus={() => tagFilterFocused = true}
-            onblur={() => setTimeout(() => tagFilterFocused = false, 200)}
-            oninput={() => tagFilterFocused = true}
-            placeholder="Tag: Search / Click card to filter"
-            class="filter-select tag-filter-input"
-          />
-        {#if tagFilterFocused}
-          <div class="tag-filter-dropdown">
-            {#each rawTagCounts.filter(t => !tagFilterText || t.name.toLowerCase().includes(tagFilterText.toLowerCase())).slice(0, 50) as t}
-              <button class="tag-filter-option" onmousedown={(e) => { e.preventDefault(); addTagFilter(t.name); tagFilterFocused = false; tagFilterText = ''; document.activeElement?.blur() }}>{t.name} ({t.count})</button>
-            {/each}
-          </div>
-        {/if}
+
+      <div class="inline-block relative">
+        <input
+          type="text"
+          bind:value={tagFilterText}
+          bind:this={tagFilterInputEl}
+          onfocus={positionTagDropdown}
+          onblur={() => setTimeout(() => tagFilterFocused = false, 200)}
+          oninput={positionTagDropdown}
+          placeholder="Tag: Search / Click card to filter"
+          class="input input-bordered input-sm w-32"
+        />
       </div>
-      <button class="filter-btn" onclick={resetFilters}>Reset</button>
-      <select bind:value={filters.sort} onchange={(e) => { applyFilters(); e.target.blur() }} class="filter-select">
+      {#if tagFilterFocused}
+        <div style={tagDropdownStyle} class="fixed z-[99999] flex flex-col p-2 shadow bg-base-200 rounded-box overflow-y-auto overflow-x-hidden dropdown-scroll">
+          {#each rawTagCounts.filter(t => !tagFilterText || t.name.toLowerCase().includes(tagFilterText.toLowerCase())).slice(0, 50) as t}
+            <button class="block w-full text-left px-2.5 py-1.5 text-xs text-base-content hover:bg-base-300 cursor-pointer bg-none border-none" onmousedown={(e) => { e.preventDefault(); addTagFilter(t.name); tagFilterFocused = false; tagFilterText = ''; document.activeElement?.blur() }}>{t.name} ({t.count})</button>
+          {/each}
+        </div>
+      {/if}
+
+      <select bind:value={filters.sort} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-32">
         <option value="updated_at">Sort: Updated</option>
         <option value="posted_at">Sort: Posted</option>
       </select>
-      <span class="color-divider"></span>
+
+      <div class="w-px self-stretch bg-base-300 mx-1"></div>
+
       <input
         type="color"
         value={colorPick}
         onchange={applyColor}
-        class="color-input"
+        class="input input-bordered w-8 h-8 p-1 rounded-full"
         title="Filter by palette color"
       />
+
       {#if colorActive}
-        <label class="threshold-label">
+        <label class="flex items-center gap-1.5 text-xs text-base-content/50">
           <span>Δ {colorThreshold}</span>
           <input
             type="range"
@@ -624,88 +676,95 @@ let searchTimer = $state(null)
             max="441"
             bind:value={colorThreshold}
             onchange={applyThreshold}
-            class="threshold-slider"
+            class="range range-sm w-28"
           />
         </label>
-        <button class="filter-btn" onclick={clearColor} title="Clear color filter">✕</button>
+        <button class="btn btn-neutral btn-sm" onclick={clearColor} title="Clear color filter">✕</button>
       {/if}
-    </div>
-    <div class="search-wrap">
-      <input
-        type="text"
-        placeholder="Search filename, author, character, style, media..."
-        bind:value={search}
-        oninput={onSearchInput}
-        class="search-input"
-      />
-      {#if search}
-        <button class="search-clear" onclick={clearSearch}>✕</button>
-      {/if}
-    </div>
+      <button class="btn btn-neutral btn-sm" onclick={resetFilters}>Reset</button>
+
+      <label class="input input-bordered input-sm flex items-center gap-2 flex-1 min-w-48 ml-1">
+        <input
+          type="text"
+          placeholder="Search filename, author, character, style, media..."
+          bind:value={search}
+          oninput={onSearchInput}
+          class="grow"
+        />
+        {#if search}
+          <button class="btn btn-neutral btn-xs" onclick={clearSearch}>✕</button>
+        {/if}
+      </label>
   </div>
 
   {#if filters.tags.length}
-    <div class="tag-chips">
+    <div class="overflow-y-auto max-h-[25vh] mb-3">
+    <div class="flex flex-wrap gap-1.5 px-1">
       {#each filters.tags as t}
-        <span class="tag-chip">
+        <span class="badge badge-primary badge-lg gap-1">
           {synonymMap[t] || t}
-          <button class="tag-chip-x" onclick={() => removeTagFilter(t)}>✕</button>
+          <button class="btn btn-neutral btn-xs text-inherit p-0 min-h-0 h-auto" onclick={() => removeTagFilter(t)}>✕</button>
         </span>
       {/each}
     </div>
+  </div>
   {/if}
 
   {#if loading}
-    <div class="loading">Loading...</div>
+    <div class="flex justify-center py-16 text-base-content/40 text-base">Loading...</div>
   {:else if images.length === 0}
-    <div class="empty">No images found</div>
+    <div class="flex justify-center py-16 text-base-content/40 text-base">No images found</div>
   {:else}
-    <div class="grid">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
       {#each images as img (img.filename)}
         <div
-          class="card"
-          class:selected={selectedImage?.filename === img.filename}
-          class:rescan-selected={selectedForRescan.has(img.filename)}
+          class="card card-compact bg-base-200 cursor-pointer transition-shadow duration-200 hover:shadow-xl border border-base-300"
+          class:border-primary={selectedImage?.filename === img.filename}
+          class:border-warning={selectedForRescan.has(img.filename)}
           onclick={() => { if (rescanMode) { toggleSelect(img.filename) } else { openDetail(img) } }}
           role="button"
           tabindex="0"
           onkeydown={(e) => e.key === 'Enter' && (rescanMode ? toggleSelect(img.filename) : openDetail(img))}
         >
-          <div class="card-thumb">
+          <figure class="relative aspect-square overflow-hidden bg-base-300">
             {#if !loadedImgs.has(img.filename)}
-              <div class="img-placeholder"></div>
+              <div class="absolute inset-0 bg-base-300 animate-pulse"></div>
             {/if}
             <img
               src="/api/images/{img.filename}/file"
               alt={img.filename}
               loading="lazy"
               onload={() => loadedImgs = new Set([...loadedImgs, img.filename])}
-              class:img-hidden={!loadedImgs.has(img.filename)}
+              class="w-full h-full object-cover"
+              class:opacity-0={!loadedImgs.has(img.filename)}
             />
-            <span class="nsfw-overlay">{nsfwBadge(img.nsfw)}</span>
+            <span class="absolute top-1.5 right-1.5 text-lg drop-shadow-[0_0_4px_rgba(0,0,0,1)]">{nsfwBadge(img.nsfw)}</span>
             {#if rescanMode}
-              <span class="check-overlay">{selectedForRescan.has(img.filename) ? '✓' : ''}</span>
+              <span class="absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-warning flex items-center justify-center text-black text-sm font-bold leading-none">{selectedForRescan.has(img.filename) ? '✓' : ''}</span>
             {/if}
-          </div>
-          <div class="card-info">
-            <!-- filename shown in detail panel only -->
+          </figure>
+          <div class="card-body p-3 gap-1">
             {#if img.author_username || img.posted_at}
-              <div class="card-author">
-                {#if img.author_username}<span>@{img.author_username}</span>{/if}
-                {#if img.posted_at}<span class="card-date">{formatDate(img.posted_at)}</span>{/if}
+              <div class="flex gap-2 items-center text-xs text-base-content/40 mb-1">
+                {#if img.author_username}<span class="text-base-content/50">@{img.author_username}</span>{/if}
+                {#if img.posted_at}<span class="text-base-content/30">{formatDate(img.posted_at)}</span>{/if}
               </div>
             {/if}
-            <div class="card-meta">
-              <!-- status shown in detail panel only -->
+            <div class="flex gap-1.5 items-center mb-1.5">
               {#if img.tags_edited === '1' || img.tags_edited === 1}
-                <span class="badge-edited">edited</span>
+                <span class="badge badge-xs badge-ghost">edited</span>
               {/if}
-              {#if nsfwBadge(img.nsfw)}<span class="badge-nsfw">NSFW</span>{/if}
-              <span class="media-type" class:type-photo={img.media_type === 'photograph'} class:type-illust={img.media_type === 'illustration'} class:type-manga={img.media_type === 'manga'} class:type-tutorial={img.media_type === 'tutorial'}>{img.media_type}</span>
-              {#if img.style}<span class="media-type style-tag">{img.style}</span>{/if}
+              {#if nsfwBadge(img.nsfw)}<span class="badge badge-xs badge-error">NSFW</span>{/if}
+              <span class="badge badge-xs"
+                class:badge-info={img.media_type === 'photograph'}
+                class:badge-secondary={img.media_type === 'illustration'}
+                class:badge-warning={img.media_type === 'manga'}
+                class:badge-success={img.media_type === 'tutorial'}
+              >{img.media_type}</span>
+              {#if img.style}<span class="badge badge-xs badge-ghost">{img.style}</span>{/if}
             </div>
             {#if img.palette?.length}
-              <div class="palette-bar">
+              <div class="flex gap-0.5 h-1.5 mb-1">
                 {#each img.palette as c}
                   <span
                     class="palette-swatch"
@@ -720,16 +779,16 @@ let searchTimer = $state(null)
               </div>
             {/if}
             {#if img.tags?.length}
-              <div class="card-tags">
+              <div class="flex flex-wrap gap-1">
                 {#each [...new Set(img.tags.filter(t => !/_(hair|eyes|skin)$/i.test(typeof t === 'string' ? t : t.label)).slice(0, 4).map(t => ({ eng: typeof t === 'string' ? t : t.label, cn: img.displayed_tags?.[img.tags.indexOf(t)] || resolveTag(typeof t === 'string' ? t : t.label) })))] as { eng, cn }}
-                  <span class="tag content tag-clickable" role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); filterByTag(eng) }} onkeydown={(e) => e.key === 'Enter' && filterByTag(eng)}>{cn}</span>
+                  <span class="badge badge-ghost badge-xs cursor-pointer hover:bg-base-300" role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); filterByTag(eng) }} onkeydown={(e) => e.key === 'Enter' && filterByTag(eng)}>{cn}</span>
                 {/each}
               </div>
             {/if}
             {#if img.characters?.length}
-              <div class="card-tags">
+              <div class="flex flex-wrap gap-1">
                 {#each img.characters.slice(0, 3) as c}
-                  <span class="tag character">{c.label}</span>
+                  <span class="badge badge-ghost badge-xs text-warning">{c.label}</span>
                 {/each}
               </div>
             {/if}
@@ -738,7 +797,7 @@ let searchTimer = $state(null)
       {/each}
     </div>
     {#if !allLoaded}
-      <div bind:this={sentinelEl} class="scroll-sentinel">
+      <div bind:this={sentinelEl} class="flex justify-center py-5 text-sm text-base-content/40">
         {#if loadingMore}<span>Loading more…</span>{/if}
       </div>
     {/if}
@@ -746,819 +805,206 @@ let searchTimer = $state(null)
 </main>
 
 {#if selectedImage}
-  <div class="overlay" onclick={closeDetail} role="presentation"></div>
-  <div class="detail-panel">
-    <div class="detail-header">
-      <button class="close-btn" onclick={closeDetail}>&times;</button>
-    </div>
-    <div class="detail-content">
-      <div class="detail-image">
-        <img src="/api/images/{selectedImage.filename}/file" alt={selectedImage.filename} />
-      </div>
-      <div class="detail-info">
-        <h2>{selectedImage.filename}</h2>
-        <div class="detail-meta">
-          <p><strong>Status:</strong> <span class={statusClass(selectedImage.status)}>{selectedImage.status}</span></p>
-          <p><strong>Media:</strong>
-            <select bind:value={selectedImage.media_type} onchange={() => updateField(selectedImage.filename, 'media_type', selectedImage.media_type)} class="detail-select">
-              <option value="">—</option>
-              {#each ['photograph', 'illustration', 'manga', 'tutorial', 'unknown'] as mt}
-                <option value={mt}>{mt}</option>
-              {/each}
-            </select>
-            <select bind:value={selectedImage.style} onchange={() => updateField(selectedImage.filename, 'style', selectedImage.style)} class="detail-select">
-              <option value="">—</option>
-              {#each ['portrait', 'street', 'landscape', 'still_life', 'animal', 'plants', 'anime', 'realistic', 'rakugaki', 'scenery', 'colored', 'monochrome'] as st}
-                <option value={st}>{st}</option>
-              {/each}
-            </select>
-          </p>
-          <p><strong>NSFW:</strong>
-            <select bind:value={selectedImage.nsfw} onchange={() => updateField(selectedImage.filename, 'nsfw', selectedImage.nsfw === 'yes')} class="detail-select">
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
-            </select>
-          </p>
-          <p>
-            <strong>Author:</strong>
-            {#if selectedImage.author_username}
-              <a href="https://x.com/{selectedImage.author_username}" target="_blank" rel="noopener noreferrer">@{selectedImage.author_username}</a>
-            {:else}
-              -
-            {/if}
-          </p>
-          <p><strong>Posted:</strong> {selectedImage.posted_at || '-'}</p>
+  <dialog class="modal modal-open">
+    <div class="modal-box max-w-4xl w-[90vw] max-h-[90vh] flex flex-col">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-neutral absolute right-4 top-4" onclick={closeDetail}>✕</button>
+      </form>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5 overflow-auto">
+        <div>
+          <img src="/api/images/{selectedImage.filename}/file" alt={selectedImage.filename} class="w-full rounded-lg" />
         </div>
-
-        {#if selectedImage.palette?.length}
-          <div class="palette-bar large">
-            {#each selectedImage.palette as c}
-              <span
-                class="palette-swatch"
-                style="background:{c.hex}"
-                title="{c.hex}"
-              ></span>
-            {/each}
+        <div>
+          <h2 class="text-base text-base-content font-bold mb-3 break-all">{selectedImage.filename}</h2>
+          <div class="text-sm space-y-1.5">
+            <p class="text-base-content/60"><strong class="text-base-content/80">Status:</strong> <span class="badge badge-sm" class:badge-success={selectedImage.status === 'done'} class:badge-error={selectedImage.status === 'error'} class:badge-warning={selectedImage.status === 'pending'}>{selectedImage.status}</span></p>
+            <p class="text-base-content/60 flex items-center gap-1.5 flex-wrap"><strong class="text-base-content/80">Media:</strong>
+              <select bind:value={selectedImage.media_type} onchange={() => updateField(selectedImage.filename, 'media_type', selectedImage.media_type)} class="select select-bordered select-xs w-auto">
+                <option value="">—</option>
+                {#each ['photograph', 'illustration', 'manga', 'tutorial', 'unknown'] as mt}
+                  <option value={mt}>{mt}</option>
+                {/each}
+              </select>
+              <select bind:value={selectedImage.style} onchange={() => updateField(selectedImage.filename, 'style', selectedImage.style)} class="select select-bordered select-xs w-auto">
+                <option value="">—</option>
+                {#each ['portrait', 'street', 'landscape', 'still_life', 'animal', 'plants', 'anime', 'realistic', 'rakugaki', 'scenery', 'colored', 'monochrome'] as st}
+                  <option value={st}>{st}</option>
+                {/each}
+              </select>
+            </p>
+            <p class="text-base-content/60 flex items-center gap-1.5"><strong class="text-base-content/80">NSFW:</strong>
+              <select bind:value={selectedImage.nsfw} onchange={() => updateField(selectedImage.filename, 'nsfw', selectedImage.nsfw === 'yes')} class="select select-bordered select-xs w-auto">
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </p>
+            <p class="text-base-content/60">
+              <strong class="text-base-content/80">Author:</strong>
+              {#if selectedImage.author_username}
+                <a href="https://x.com/{selectedImage.author_username}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-base-content/70 hover:text-base-content no-underline transition-colors">
+                  @{selectedImage.author_username}
+                  <svg class="w-3.5 h-3.5 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+              {:else}
+                -
+              {/if}
+            </p>
+            <p class="text-base-content/60"><strong class="text-base-content/80">Posted:</strong> {selectedImage.posted_at || '-'}</p>
           </div>
-        {/if}
 
-        {#if selectedImage.clip_scores?.length}
-          <div class="section">
-            <h3>CLIP Scores</h3>
-            <div class="clip-scores">
-              {#each _CLIP_LABELS as item}
-                {#if selectedImage.clip_scores[item.idx] > 0.01}
-                  <span class="clip-score" class:highlight={item.isMedia || item.isMatch(selectedImage)}>
-                    {item.label}: {(selectedImage.clip_scores[item.idx] * 100).toFixed(1)}%
-                  </span>
-                {/if}
+          {#if selectedImage.palette?.length}
+            <div class="flex gap-0.5 h-2.5 mb-3 palette-bar large">
+              {#each selectedImage.palette as c}
+                <span class="palette-swatch" style="background:{c.hex}" title="{c.hex}"></span>
               {/each}
             </div>
-          </div>
-        {/if}
+          {/if}
 
-        {#if selectedImage.artists?.length}
-          <div class="section">
-            <h3>Artists</h3>
-            <div class="tags-list">
-              {#each selectedImage.artists as a}
-                <span class="tag artist" title={`${a.confidence}`}>{a.label} ({a.confidence})</span>
-              {/each}
+          {#if selectedImage.clip_scores?.length}
+            <div class="mt-4">
+              <h3 class="text-xs text-base-content/50 uppercase tracking-wide mb-2">CLIP Scores</h3>
+              <div class="flex flex-wrap gap-1">
+                {#each _CLIP_LABELS as item}
+                  {#if selectedImage.clip_scores[item.idx] > 0.01}
+                    <span class="badge badge-xs" class:badge-primary={item.isMedia || item.isMatch(selectedImage)}>
+                      {item.label}: {(selectedImage.clip_scores[item.idx] * 100).toFixed(1)}%
+                    </span>
+                  {/if}
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if selectedImage.artists?.length}
+            <div class="mt-4">
+              <h3 class="text-xs text-base-content/50 uppercase tracking-wide mb-2">Artists</h3>
+              <div class="flex flex-wrap gap-1">
+                {#each selectedImage.artists as a}
+                  <span class="badge badge-ghost badge-sm text-info" title={`${a.confidence}`}>{a.label} ({a.confidence})</span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if selectedImage.characters?.length}
+            <div class="mt-4">
+              <h3 class="text-xs text-base-content/50 uppercase tracking-wide mb-2">Characters</h3>
+              <div class="flex flex-wrap gap-1">
+                {#each selectedImage.characters as c}
+                  <span class="badge badge-ghost badge-sm text-warning" title={`${c.confidence}`}>{c.label} ({c.confidence})</span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <div class="mt-4">
+            <h3 class="text-xs text-base-content/50 uppercase tracking-wide mb-2">Tags (JSON)</h3>
+            <textarea bind:value={editingTags} rows="8" class="textarea textarea-bordered font-mono text-xs w-full"></textarea>
+            <div class="flex gap-2 mt-2.5 flex-wrap">
+              <button class="btn btn-primary btn-sm" onclick={saveTags} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Tags'}
+              </button>
+              <button class="btn btn-neutral btn-sm" onclick={() => handleRescan(selectedImage.filename)}>Rescan</button>
+              <button class="btn btn-error btn-sm" onclick={() => handleDelete(selectedImage.filename)}>Delete</button>
+            </div>
+            <div class="mt-2.5 border-t border-base-300 pt-2.5">
+              <input type="text" bind:value={tagFilter} class="input input-bordered w-full text-xs mb-2" placeholder="Filter tags..." />
+              <div class="flex flex-wrap gap-1 max-h-40 overflow-y-auto">
+                {#each rawTagNamesFiltered as tag}
+                  <button
+                    class="btn btn-neutral btn-xs"
+                    class:btn-primary={currentTags.includes(tag)}
+                    onclick={() => currentTags.includes(tag) ? removeTag(tag) : addTag(tag)}
+                  >{tag}</button>
+                {/each}
+              </div>
             </div>
           </div>
-        {/if}
 
-        {#if selectedImage.characters?.length}
-          <div class="section">
-            <h3>Characters</h3>
-            <div class="tags-list">
-              {#each selectedImage.characters as c}
-                <span class="tag character" title={`${c.confidence}`}>{c.label} ({c.confidence})</span>
-              {/each}
+          {#if selectedImage.error}
+            <div class="mt-3 p-2.5 bg-error/10 border border-error/30 rounded-box text-error text-sm">
+              <strong>Error:</strong> {selectedImage.error}
             </div>
-          </div>
-        {/if}
-
-        <div class="section">
-          <h3>Tags (JSON)</h3>
-          <textarea bind:value={editingTags} rows="8"></textarea>
-          <div class="action-bar">
-            <button class="btn primary" onclick={saveTags} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Tags'}
-            </button>
-            <button class="btn" onclick={() => handleRescan(selectedImage.filename)}>Rescan</button>
-            <button class="btn danger" onclick={() => handleDelete(selectedImage.filename)}>Delete</button>
-          </div>
-          <div class="tag-picker">
-            <input type="text" bind:value={tagFilter} class="tag-picker-search" placeholder="Filter tags..." />
-            <div class="tag-picker-list">
-              {#each rawTagNamesFiltered as tag}
-                <button
-                  class="tag-pick-btn"
-                  class:in-list={currentTags.includes(tag)}
-                  onclick={() => currentTags.includes(tag) ? removeTag(tag) : addTag(tag)}
-                >{tag}</button>
-              {/each}
-            </div>
-          </div>
+          {/if}
         </div>
-
-        {#if selectedImage.error}
-          <div class="error-box">
-            <strong>Error:</strong> {selectedImage.error}
-          </div>
-        {/if}
       </div>
     </div>
-  </div>
+  </dialog>
 {/if}
 
 {#if showTagManager}
-  <div class="overlay" onclick={() => showTagManager = false} role="presentation"></div>
-  <div class="tag-manager">
-    <div class="tag-manager-header">
-      <h2>Manage Tags</h2>
-      <button class="close-btn" onclick={() => showTagManager = false}>&times;</button>
-    </div>
-    <div class="tag-manager-body">
-      <div class="tag-manager-add">
-        <input type="text" bind:value={tagManagerNew} placeholder="Tag name" class="tm-input" />
-        <input type="text" bind:value={tagManagerDesc} placeholder="Description" class="tm-input" />
-        <button class="btn primary" onclick={addTagManagerTag} disabled={!tagManagerNew.trim()}>Add</button>
-      </div>
-      <input
-        type="text"
-        bind:value={tagManagerSearch}
-        oninput={loadTagManager}
-        placeholder="Search tags..."
-        class="tm-input tm-search"
-      />
-      <div class="tag-manager-list">
-        {#each tagManagerTags as t}
-          <div class="tm-row">
-            {#if tagManagerEditing === t.name}
-              <input type="text" bind:value={tagManagerEditDesc} class="tm-input tm-edit" />
-              <button class="btn primary" onclick={() => saveTagManagerEdit(t.name)}>Save</button>
-              <button class="btn" onclick={() => { tagManagerEditing = null }}>Cancel</button>
-            {:else}
-              <span class="tm-name">{t.name}</span>
-              <span class="tm-desc">{t.description}</span>
-              <button class="tag-manager-btn" onclick={() => { tagManagerEditing = t.name; tagManagerEditDesc = t.description }}>Edit</button>
-              <button class="tag-manager-btn danger" onclick={() => deleteTagManagerTag(t.name)}>Del</button>
-            {/if}
+  <dialog class="modal modal-open">
+    <div class="modal-box max-w-xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-neutral absolute right-4 top-4" onclick={() => showTagManager = false}>✕</button>
+      </form>
+      <h2 class="text-base font-bold mb-4">Manage Tags</h2>
+      <div class="space-y-3">
+        <details class="collapse collapse-arrow border border-base-300 rounded-box" open>
+          <summary class="collapse-title text-sm font-semibold min-h-0 py-2">Tag Descriptions</summary>
+          <div class="collapse-content">
+            <div class="flex gap-1.5 mb-2.5 flex-wrap pt-1">
+              <input type="text" bind:value={tagManagerNew} placeholder="Tag name" class="input input-bordered input-sm flex-1 min-w-28" />
+              <input type="text" bind:value={tagManagerDesc} placeholder="Description" class="input input-bordered input-sm flex-1 min-w-28" />
+              <button class="btn btn-primary btn-sm" onclick={addTagManagerTag} disabled={!tagManagerNew.trim()}>Add</button>
+            </div>
+            <input type="text" bind:value={tagManagerSearch} oninput={loadTagManager} placeholder="Search tags..." class="input input-bordered input-sm w-full mb-2" />
+            <div class="flex flex-col gap-1 max-h-60 overflow-y-auto">
+              {#each tagManagerTags as t}
+                <div class="flex items-center gap-1.5 p-2 bg-base-300 rounded-box text-xs">
+                  {#if tagManagerEditing === t.name}
+                    <input type="text" bind:value={tagManagerEditDesc} class="input input-bordered input-sm flex-1" />
+                    <button class="btn btn-primary btn-xs" onclick={() => saveTagManagerEdit(t.name)}>Save</button>
+                    <button class="btn btn-neutral btn-xs" onclick={() => { tagManagerEditing = null }}>Cancel</button>
+                  {:else}
+                    <span class="text-base-content font-semibold min-w-[120px]">{t.name}</span>
+                    <span class="text-base-content/50 flex-1 truncate">{t.description}</span>
+                    <button class="btn btn-neutral btn-xs" onclick={() => { tagManagerEditing = t.name; tagManagerEditDesc = t.description }}>Edit</button>
+                    <button class="btn btn-neutral btn-xs text-error" onclick={() => deleteTagManagerTag(t.name)}>Del</button>
+                  {/if}
+                </div>
+              {/each}
+              {#if tagManagerTags.length === 0}
+                <div class="text-center py-8 text-base-content/40">No tags found</div>
+              {/if}
+            </div>
           </div>
-        {/each}
-        {#if tagManagerTags.length === 0}
-          <div class="empty">No tags found</div>
-        {/if}
-      </div>
+        </details>
 
-      <h3 class="synonym-heading">Synonyms</h3>
-      <div class="tag-manager-add">
-        <input type="text" bind:value={synonymNew} placeholder="Synonym" class="tm-input" />
-        <input type="text" bind:value={synonymCanonical} placeholder="Canonical name" class="tm-input" />
-        <button class="btn primary" onclick={addSynonym} disabled={!synonymNew.trim() || !synonymCanonical.trim()}>Add</button>
-      </div>
-      <input
-        type="text"
-        bind:value={synonymSearch}
-        oninput={loadSynonyms}
-        placeholder="Search synonyms..."
-        class="tm-input tm-search"
-      />
-      <div class="tag-manager-list">
-        {#each tagSynonyms as s}
-          <div class="tm-row">
-            <span class="tm-synonym">{s.synonym}</span>
-            <span class="tm-arrow">→</span>
-            <span class="tm-canonical">{s.canonical}</span>
-            <button class="tag-manager-btn danger" onclick={() => deleteSynonym(s.synonym)}>Del</button>
+        <details class="collapse collapse-arrow border border-base-300 rounded-box" open>
+          <summary class="collapse-title text-sm font-semibold min-h-0 py-2">Synonyms</summary>
+          <div class="collapse-content">
+            <div class="flex gap-1.5 mb-2.5 flex-wrap pt-1">
+              <input type="text" bind:value={synonymNew} placeholder="Synonym" class="input input-bordered input-sm flex-1 min-w-28" />
+              <input type="text" bind:value={synonymCanonical} placeholder="Canonical name" class="input input-bordered input-sm flex-1 min-w-28" />
+              <button class="btn btn-primary btn-sm" onclick={addSynonym} disabled={!synonymNew.trim() || !synonymCanonical.trim()}>Add</button>
+            </div>
+            <input type="text" bind:value={synonymSearch} oninput={loadSynonyms} placeholder="Search synonyms..." class="input input-bordered input-sm w-full mb-2" />
+            <div class="flex flex-col gap-1 max-h-60 overflow-y-auto">
+              {#each tagSynonyms as s}
+                <div class="flex items-center gap-1.5 p-2 bg-base-300 rounded-box text-xs">
+                  <span class="text-success font-semibold min-w-[120px]">{s.synonym}</span>
+                  <span class="text-base-content/40">→</span>
+                  <span class="text-base-content flex-1">{s.canonical}</span>
+                  <button class="btn btn-neutral btn-xs text-error" onclick={() => deleteSynonym(s.synonym)}>Del</button>
+                </div>
+              {/each}
+              {#if tagSynonyms.length === 0}
+                <div class="text-center py-8 text-base-content/40">No synonyms found</div>
+              {/if}
+            </div>
           </div>
-        {/each}
-        {#if tagSynonyms.length === 0}
-          <div class="empty">No synonyms found</div>
-        {/if}
+        </details>
       </div>
     </div>
-  </div>
+  </dialog>
 {/if}
 
 <style>
-  :global(*) {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
-
-  :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #0f0f0f;
-    color: #e0e0e0;
-    min-height: 100vh;
-  }
-
-  main {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 20px;
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  h1 { font-size: 24px; color: #fff; }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-
-  .header-buttons {
-    display: flex;
-    gap: 4px;
-  }
-
-  .stats { display: flex; gap: 16px; font-size: 13px; }
-  .stat { padding: 4px 10px; background: #1a1a1a; border-radius: 6px; }
-  .stat.filtered { color: #2a6eff; }
-  .stat.pending { color: #f0ad4e; }
-  .stat.done { color: #5cb85c; }
-  .stat.error { color: #d9534f; }
-
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-  }
-
-  .filters { display: flex; gap: 4px; }
-  .filter-btn {
-    padding: 6px 14px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    color: #aaa;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
-  }
-  .filter-btn.active { background: #2a6eff; color: #fff; border-color: #2a6eff; }
-  .filter-btn.primary { background: #2a6eff; color: #fff; border-color: #2a6eff; }
-  .filter-btn.primary:disabled { opacity: 0.5; cursor: default; }
-  .filter-btn:hover { border-color: #555; }
-
-  .filter-select {
-    padding: 6px 10px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    color: #ccc;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .filter-select:focus { outline: none; border-color: #2a6eff; }
-  .filter-select option { background: #1a1a1a; }
-
-  .color-divider { width: 1px; align-self: stretch; background: #333; margin: 0 4px; }
-  .color-input { width: 34px; height: 30px; padding: 0; border: 1px solid #333; border-radius: 6px; background: #1a1a1a; cursor: pointer; }
-  .color-input::-webkit-color-swatch-wrapper { padding: 2px; }
-  .color-input::-webkit-color-swatch { border: none; border-radius: 4px; }
-
-  .threshold-label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #888; }
-  .threshold-slider { width: 110px; accent-color: #2a6eff; cursor: pointer; }
-
-  .scroll-sentinel { display: flex; justify-content: center; padding: 20px 0; color: #666; font-size: 13px; }
-
-  .search-wrap { position: relative; flex: 1; min-width: 200px; }
-  .search-input {
-    width: 100%;
-    padding: 8px 32px 8px 14px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 6px;
-    color: #e0e0e0;
-    font-size: 13px;
-  }
-  .search-input:focus { outline: none; border-color: #2a6eff; }
-  .search-clear {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    font-size: 14px;
-    padding: 2px 4px;
-  }
-  .search-clear:hover { color: #ccc; }
-
-  .loading, .empty { text-align: center; padding: 60px 0; color: #666; font-size: 16px; }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 16px;
-  }
-
-  .card {
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 10px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: border-color 0.15s, transform 0.15s;
-  }
-  .card:hover { border-color: #444; transform: translateY(-2px); }
-  .card.selected { border-color: #2a6eff; }
-  .card.rescan-selected { border-color: #f0ad4e; outline: 2px solid #f0ad4e; }
-
-  .check-overlay {
-    position: absolute;
-    top: 6px;
-    left: 6px;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: #f0ad4e;
-    color: #000;
-    font-size: 14px;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-  }
-
-  .card-thumb {
-    position: relative;
-    aspect-ratio: 1;
-    overflow: hidden;
-    background: #111;
-  }
-  .card-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  .img-placeholder {
-    position: absolute;
-    inset: 0;
-    background: #1a1a2e;
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-  .img-hidden { opacity: 0; }
-  @keyframes pulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.8; }
-  }
-  .nsfw-overlay {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    font-size: 18px;
-    text-shadow: 0 0 4px #000;
-  }
-
-  .card-info { padding: 10px 12px; }
-  .card-filename {
-    font-size: 12px;
-    color: #ccc;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-bottom: 6px;
-  }
-  .card-meta {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-  .media-type { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
-  .media-type.type-photo { color: #5bc0de; background: #1a2a3a; }
-  .media-type.type-illust { color: #b8a0e8; background: #2a1a3a; }
-  .media-type.type-manga { color: #f0c040; background: #2a2a1a; }
-  .media-type.type-tutorial { color: #40e0a0; background: #1a2a2a; }
-  .media-type.style-tag { color: #c9a0ff; background: #2a1a3a; }
-
-  .badge-done { color: #5cb85c; font-size: 11px; font-weight: 600; text-transform: uppercase; }
-  .badge-pending { color: #f0ad4e; font-size: 11px; font-weight: 600; text-transform: uppercase; }
-  .badge-error { color: #d9534f; font-size: 11px; font-weight: 600; text-transform: uppercase; }
-  .badge-edited { color: #7c6aff; font-size: 10px; font-weight: 600; text-transform: uppercase; background: #1a1a3a; padding: 1px 6px; border-radius: 4px; }
-  .badge-nsfw { color: #d9534f; font-size: 10px; font-weight: 600; text-transform: uppercase; background: #3a1a1a; padding: 1px 6px; border-radius: 4px; }
-
-  .card-author {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    font-size: 11px;
-    color: #777;
-    margin-bottom: 6px;
-  }
-  .card-author span:first-child { color: #888; }
-  .card-date { color: #555 !important; }
-
-  .palette-bar {
-    display: flex;
-    gap: 2px;
-    height: 6px;
-    margin-bottom: 6px;
-  }
-  .palette-bar.large { height: 10px; margin-bottom: 12px; gap: 3px; }
-  .palette-swatch {
-    flex: 1;
-    border-radius: 2px;
-    cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.15s;
-  }
-  .palette-swatch:hover {
-    transform: scaleY(2);
-    box-shadow: 0 0 6px rgba(255,255,255,0.4);
-    z-index: 1;
-  }
-  .palette-bar.large .palette-swatch:hover {
-    transform: scaleY(1.5);
-  }
-
-  .card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
-  .tag-clickable { cursor: pointer; }
-  .tag-clickable:hover { background: #444; color: #fff; }
-  .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 4px; }
-  .tag-chip {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 12px; padding: 3px 8px; border-radius: 12px;
-    background: #2a4a6a; color: #8cf;
-  }
-  .tag-chip-x {
-    background: none; border: none; color: #8cf; cursor: pointer;
-    font-size: 14px; padding: 0; line-height: 1;
-  }
-  .tag-chip-x:hover { color: #fff; }
-  .tag {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: #2a2a2a;
-    color: #aaa;
-  }
-  .tag.artist { color: #7cb8ff; background: #1a2a4a; font-size: 11px; font-weight: 600; }
-  .tag.character { color: #ff9f7c; background: #4a2a1a; font-size: 11px; }
-  .tag.content { color: #b8e0a8; background: #1f3a1a; }
-
-  .tags-list { display: flex; flex-wrap: wrap; gap: 6px; }
-  .tags-list .tag { font-size: 12px; padding: 3px 8px; }
-
-  /* --- Detail Panel --- */
-  .overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 100;
-  }
-
-  .detail-panel {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90vw;
-    max-width: 900px;
-    max-height: 90vh;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    z-index: 101;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .detail-header {
-    display: flex;
-    justify-content: flex-end;
-    padding: 8px 8px 0;
-    flex-shrink: 0;
-  }
-
-  .close-btn {
-    width: 32px;
-    height: 32px;
-    background: #333;
-    border: none;
-    color: #fff;
-    font-size: 20px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .close-btn:hover { background: #555; }
-
-  .detail-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    padding: 0 20px 20px;
-    overflow: auto;
-  }
-
-  @media (max-width: 768px) {
-    .detail-content { grid-template-columns: 1fr; }
-  }
-
-  .detail-image img {
-    width: 100%;
-    border-radius: 8px;
-  }
-
-  .detail-info h2 {
-    font-size: 16px;
-    color: #fff;
-    margin-bottom: 12px;
-    word-break: break-all;
-  }
-
-  .detail-meta p { margin-bottom: 6px; font-size: 13px; color: #aaa; }
-  .detail-meta strong { color: #ccc; }
-  .detail-select {
-    padding: 2px 6px;
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 4px;
-    color: #ccc;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .detail-select:focus { outline: none; border-color: #2a6eff; }
-  .detail-select option { background: #111; }
-
-  .section { margin-top: 16px; }
-  .section h3 { font-size: 13px; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-
-  textarea {
-    width: 100%;
-    padding: 8px;
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 6px;
-    color: #e0e0e0;
-    font-family: monospace;
-    font-size: 12px;
-    resize: vertical;
-  }
-  textarea:focus { outline: none; border-color: #2a6eff; }
-
-  .action-bar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-
-  .btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-    background: #333;
-    color: #e0e0e0;
-  }
-  .btn:hover { background: #444; }
-  .btn.primary { background: #2a6eff; color: #fff; }
-  .btn.primary:hover { background: #1a5eef; }
-  .btn.primary:disabled { opacity: 0.5; }
-  .btn.danger { background: #a94442; color: #fff; }
-  .btn.danger:hover { background: #c9302c; }
-
-  .error-box {
-    margin-top: 12px;
-    padding: 10px;
-    background: #2a1010;
-    border: 1px solid #a94442;
-    border-radius: 6px;
-    color: #d9534f;
-    font-size: 13px;
-  }
-
-  .tag-picker {
-    margin-top: 10px;
-    border-top: 1px solid #333;
-    padding-top: 10px;
-  }
-
-  .tag-picker-search {
-    width: 100%;
-    padding: 6px 10px;
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 6px;
-    color: #e0e0e0;
-    font-size: 12px;
-    margin-bottom: 8px;
-  }
-  .tag-picker-search:focus { outline: none; border-color: #2a6eff; }
-
-  .tag-picker-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    max-height: 160px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .tag-pick-btn {
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    border: 1px solid #333;
-    background: #1a1a1a;
-    color: #888;
-    cursor: pointer;
-    transition: background 0.1s, color 0.1s;
-  }
-  .tag-pick-btn:hover { border-color: #555; color: #ccc; }
-  .tag-pick-btn.in-list {
-    background: #2a6eff;
-    color: #fff;
-    border-color: #2a6eff;
-  }
-
-  .clip-scores { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-  .clip-score { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #1a1a2e; color: #888; }
-  .clip-score.highlight { background: #2a4a3a; color: #5ae0a0; }
-
-  .tag-filter-wrap { position: relative; }
-  .tag-filter-input { width: 120px; }
-  .tag-filter-clear {
-    position: absolute;
-    right: 4px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    font-size: 12px;
-    padding: 2px 4px;
-  }
-  .tag-filter-clear:hover { color: #ccc; }
-  .tag-filter-no-tag {
-    display: inline-flex;
-    align-items: center;
-    padding: 6px 10px;
-    background: #1a1a1a;
-    border: 1px solid #2a6eff;
-    border-radius: 6px;
-    color: #2a6eff;
-    font-size: 13px;
-    cursor: default;
-  }
-  .tag-filter-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 6px;
-    max-height: 250px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    z-index: 10;
-    margin-top: 2px;
-  }
-  .tag-filter-option {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 6px 10px;
-    background: none;
-    border: none;
-    color: #ccc;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .tag-filter-option:hover { background: #2a2a2a; }
-
-  .tag-filter-dropdown::-webkit-scrollbar { display: none; }
-
-  .tag-manager {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 600px;
-    max-width: 90vw;
-    max-height: 80vh;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    z-index: 101;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .tag-manager-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid #333;
-    flex-shrink: 0;
-  }
-  .tag-manager-header h2 { font-size: 16px; color: #fff; margin: 0; }
-
-  .tag-manager-body {
-    padding: 12px 16px;
-    overflow-y: auto;
-    flex: 1;
-  }
-
-  .tag-manager-add {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 10px;
-    flex-wrap: wrap;
-  }
-
-  .tm-input {
-    padding: 6px 10px;
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 6px;
-    color: #e0e0e0;
-    font-size: 12px;
-    flex: 1;
-    min-width: 120px;
-  }
-  .tm-input:focus { outline: none; border-color: #2a6eff; }
-  .tm-input.tm-search { width: 100%; margin-bottom: 8px; }
-  .tm-input.tm-edit { flex: 1; }
-
-  .tag-manager-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .tm-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
-    background: #111;
-    border-radius: 6px;
-    font-size: 12px;
-  }
-
-  .tm-name {
-    color: #e0e0e0;
-    font-weight: 600;
-    min-width: 120px;
-  }
-  .tm-desc {
-    color: #888;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .tag-manager-btn {
-    padding: 3px 10px;
-    background: #2a2a2a;
-    border: 1px solid #444;
-    border-radius: 4px;
-    color: #aaa;
-    cursor: pointer;
-    font-size: 11px;
-  }
-  .tag-manager-btn:hover { border-color: #666; }
-
-  .synonym-heading {
-    color: #fff;
-    font-size: 14px;
-    margin: 16px 0 8px;
-    padding-top: 12px;
-    border-top: 1px solid #333;
-  }
-
-  .tm-synonym { color: #5cb85c; font-weight: 600; min-width: 120px; }
-  .tm-arrow { color: #555; }
-  .tm-canonical { color: #e0e0e0; flex: 1; }
-  .tag-manager-btn.danger { color: #d9534f; border-color: #5a2222; }
-  .tag-manager-btn.danger:hover { background: #3a1515; }
+  .palette-swatch { flex: 1; border-radius: 2px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+  .palette-swatch:hover { transform: scaleY(2); box-shadow: 0 0 6px rgba(255,255,255,0.4); z-index: 1; }
+  .palette-bar.large .palette-swatch:hover { transform: scaleY(1.5); }
+  .dropdown-scroll::-webkit-scrollbar { display: none; }
+  .dropdown-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+  .btn-neutral { box-shadow: none !important; }
 </style>
