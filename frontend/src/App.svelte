@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { getImages, getImagesByColor, getStats, getFilters, updateImage, deleteImage, getTagsMeta, addTagMeta, updateTagMeta, deleteTagMeta, getTagSynonyms, addTagSynonym, deleteTagSynonym, setImagesPending } from './lib/api.js'
+  import { getImages, getImagesByColor, getStats, getFilters, updateImage, deleteImage, getTagsMeta, addTagMeta, updateTagMeta, deleteTagMeta, getTagSynonyms, addTagSynonym, deleteTagSynonym, setImagesPending, getHistogram } from './lib/api.js'
 
   const _CLIP_LABELS = [
     { idx: 0, label: 'Photograph', isMedia: true, isMatch: (img) => img.media_type === 'photograph' },
@@ -51,6 +51,8 @@ let searchTimer = $state(null)
   let selectedForRescan = $state(new Set())
   let rescanning = $state(false)
   let loadedImgs = $state(new Set())
+  let histogramData = $state(null)
+  let histogramLoading = $state(false)
   let showTagManager = $state(false)
   let tagManagerTags = $state([])
   let tagManagerSearch = $state('')
@@ -396,6 +398,19 @@ let searchTimer = $state(null)
   function openDetail(img) {
     selectedImage = img
     editingTags = JSON.stringify(img.tags || [], null, 2)
+    loadHistogram(img.filename)
+  }
+
+  async function loadHistogram(filename) {
+    histogramLoading = true
+    histogramData = null
+    try {
+      const res = await getHistogram(filename, 32)
+      histogramData = res.histogram
+    } catch {
+      histogramData = null
+    }
+    histogramLoading = false
   }
 
   function closeDetail() {
@@ -563,7 +578,7 @@ let searchTimer = $state(null)
 </script>
 
 <main class="max-w-[1400px] mx-auto p-5 overflow-x-hidden">
-  <div class="navbar mb-5 gap-4 flex-wrap">
+  <div class="navbar gap-4 flex-wrap">
     <div class="flex-1">
       <h1 class="text-2xl font-bold text-base-content">Image Tag Service</h1>
     </div>
@@ -581,7 +596,7 @@ let searchTimer = $state(null)
         </button>
         {#if rescanMode}
           <button class="btn btn-sm btn-primary" onclick={selectAllFiltered}>Select All ({pageInfo.total})</button>
-          <button class="btn btn-sm btn-primary" onclick={startRescan} disabled={rescanning || selectedForRescan.size === 0}>
+          <button class="btn btn-sm btn-success" onclick={startRescan} disabled={rescanning || selectedForRescan.size === 0}>
             {rescanning ? 'Processing...' : `Start (${selectedForRescan.size})`}
           </button>
         {/if}
@@ -614,18 +629,18 @@ let searchTimer = $state(null)
         </div>
       {/if}
 
-      <select bind:value={filters.nsfw} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-28">
+      <select bind:value={filters.nsfw} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-28 overflow-hidden">
         <option value="">NSFW: All</option>
         <option value="no">No NSFW</option>
         <option value="yes">NSFW only</option>
       </select>
-      <select bind:value={filters.media_type} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-28">
+      <select bind:value={filters.media_type} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-28 overflow-hidden">
         <option value="">Media: All</option>
         {#each filterOptions.media_types as m}
           <option value={m.name}>{m.name} ({m.count})</option>
         {/each}
       </select>
-      <select bind:value={filters.style} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-28">
+      <select bind:value={filters.style} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-36 overflow-hidden">
         <option value="">Style: All</option>
         {#each filterOptions.styles as s}
           <option value={s.name}>{s.name} ({s.count})</option>
@@ -652,7 +667,7 @@ let searchTimer = $state(null)
         </div>
       {/if}
 
-      <select bind:value={filters.sort} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-32">
+      <select bind:value={filters.sort} onchange={(e) => { applyFilters(); e.target.blur() }} class="select select-bordered select-sm w-32 overflow-hidden">
         <option value="updated_at">Sort: Updated</option>
         <option value="posted_at">Sort: Posted</option>
       </select>
@@ -761,7 +776,7 @@ let searchTimer = $state(null)
                 class:badge-warning={img.media_type === 'manga'}
                 class:badge-success={img.media_type === 'tutorial'}
               >{img.media_type}</span>
-              {#if img.style}<span class="badge badge-xs badge-ghost">{img.style}</span>{/if}
+              {#if img.style}<span class="badge badge-xs badge-accent">{img.style}</span>{/if}
             </div>
             {#if img.palette?.length}
               <div class="flex gap-0.5 h-1.5 mb-1">
@@ -810,22 +825,40 @@ let searchTimer = $state(null)
       <form method="dialog">
         <button class="btn btn-sm btn-circle btn-neutral absolute right-4 top-4" onclick={closeDetail}>✕</button>
       </form>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-5 overflow-auto">
-        <div>
-          <img src="/api/images/{selectedImage.filename}/file" alt={selectedImage.filename} class="w-full rounded-lg" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5 overflow-hidden min-h-0 flex-1">
+        <div class="flex flex-col min-h-0">
+          <div class="flex-1 min-h-0 relative overflow-hidden rounded-lg">
+            <img src="/api/images/{selectedImage.filename}/file" alt={selectedImage.filename} class="w-full h-full object-contain absolute inset-0" />
+          </div>
+          {#if histogramLoading}
+            <div class="flex-shrink-0 mt-2 h-12 bg-base-300 rounded animate-pulse"></div>
+          {:else if histogramData}
+            {@const maxCount = Math.max(...histogramData, 1)}
+            <div class="flex-shrink-0 mt-2.5">
+              <h3 class="text-xs text-base-content/50 uppercase tracking-wide mb-1">Brightness Histogram</h3>
+              <div class="flex items-end h-12 gap-px rounded overflow-hidden">
+                {#each histogramData as count}
+                  {@const pct = count / maxCount}
+                  <div class="flex-1 flex flex-col justify-end" style="height: 100%;">
+                    <div style="height: {Math.max(pct * 100, 1)}%; background: var(--color-base-content); opacity: {0.15 + pct * 0.6}; min-height: 1px;"></div>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
-        <div>
+        <div class="overflow-y-auto min-h-0">
           <h2 class="text-base text-base-content font-bold mb-3 break-all">{selectedImage.filename}</h2>
           <div class="text-sm space-y-1.5">
             <p class="text-base-content/60"><strong class="text-base-content/80">Status:</strong> <span class="badge badge-sm" class:badge-success={selectedImage.status === 'done'} class:badge-error={selectedImage.status === 'error'} class:badge-warning={selectedImage.status === 'pending'}>{selectedImage.status}</span></p>
             <p class="text-base-content/60 flex items-center gap-1.5 flex-wrap"><strong class="text-base-content/80">Media:</strong>
-              <select bind:value={selectedImage.media_type} onchange={() => updateField(selectedImage.filename, 'media_type', selectedImage.media_type)} class="select select-bordered select-xs w-auto">
+              <select bind:value={selectedImage.media_type} onchange={() => updateField(selectedImage.filename, 'media_type', selectedImage.media_type)} class="select select-bordered select-xs w-auto overflow-hidden">
                 <option value="">—</option>
                 {#each ['photograph', 'illustration', 'manga', 'tutorial', 'unknown'] as mt}
                   <option value={mt}>{mt}</option>
                 {/each}
               </select>
-              <select bind:value={selectedImage.style} onchange={() => updateField(selectedImage.filename, 'style', selectedImage.style)} class="select select-bordered select-xs w-auto">
+              <select bind:value={selectedImage.style} onchange={() => updateField(selectedImage.filename, 'style', selectedImage.style)} class="select select-bordered select-xs w-auto overflow-hidden">
                 <option value="">—</option>
                 {#each ['portrait', 'street', 'landscape', 'still_life', 'animal', 'plants', 'anime', 'realistic', 'rakugaki', 'scenery', 'colored', 'monochrome'] as st}
                   <option value={st}>{st}</option>
@@ -833,7 +866,7 @@ let searchTimer = $state(null)
               </select>
             </p>
             <p class="text-base-content/60 flex items-center gap-1.5"><strong class="text-base-content/80">NSFW:</strong>
-              <select bind:value={selectedImage.nsfw} onchange={() => updateField(selectedImage.filename, 'nsfw', selectedImage.nsfw === 'yes')} class="select select-bordered select-xs w-auto">
+              <select bind:value={selectedImage.nsfw} onchange={() => updateField(selectedImage.filename, 'nsfw', selectedImage.nsfw === 'yes')} class="select select-bordered select-xs w-auto overflow-hidden">
                 <option value="no">No</option>
                 <option value="yes">Yes</option>
               </select>
@@ -912,8 +945,11 @@ let searchTimer = $state(null)
               <div class="flex flex-wrap gap-1 max-h-40 overflow-y-auto">
                 {#each rawTagNamesFiltered as tag}
                   <button
-                    class="btn btn-neutral btn-xs"
+                    class="btn btn-xs"
                     class:btn-primary={currentTags.includes(tag)}
+                    class:bg-base-300={!currentTags.includes(tag)}
+                    class:border-base-300={!currentTags.includes(tag)}
+                    class:text-base-content={!currentTags.includes(tag)}
                     onclick={() => currentTags.includes(tag) ? removeTag(tag) : addTag(tag)}
                   >{tag}</button>
                 {/each}
@@ -960,7 +996,7 @@ let searchTimer = $state(null)
                     <span class="text-base-content font-semibold min-w-[120px]">{t.name}</span>
                     <span class="text-base-content/50 flex-1 truncate">{t.description}</span>
                     <button class="btn btn-neutral btn-xs" onclick={() => { tagManagerEditing = t.name; tagManagerEditDesc = t.description }}>Edit</button>
-                    <button class="btn btn-neutral btn-xs text-error" onclick={() => deleteTagManagerTag(t.name)}>Del</button>
+                    <button class="btn btn-error btn-xs" onclick={() => deleteTagManagerTag(t.name)}>Del</button>
                   {/if}
                 </div>
               {/each}
@@ -986,7 +1022,7 @@ let searchTimer = $state(null)
                   <span class="text-success font-semibold min-w-[120px]">{s.synonym}</span>
                   <span class="text-base-content/40">→</span>
                   <span class="text-base-content flex-1">{s.canonical}</span>
-                  <button class="btn btn-neutral btn-xs text-error" onclick={() => deleteSynonym(s.synonym)}>Del</button>
+                  <button class="btn btn-error btn-xs" onclick={() => deleteSynonym(s.synonym)}>Del</button>
                 </div>
               {/each}
               {#if tagSynonyms.length === 0}
@@ -1006,5 +1042,4 @@ let searchTimer = $state(null)
   .palette-bar.large .palette-swatch:hover { transform: scaleY(1.5); }
   .dropdown-scroll::-webkit-scrollbar { display: none; }
   .dropdown-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-  .btn-neutral { box-shadow: none !important; }
 </style>

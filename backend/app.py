@@ -179,6 +179,29 @@ def update_image_endpoint(filename: str, data: ImageUpdate):
     return {"status": "updated"}
 
 
+@app.get("/api/images/{filename}/histogram")
+def get_histogram(filename: str, bins: int = Query(32)):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT filepath FROM images WHERE filename = ?", (filename,)
+    ).fetchone()
+    conn.close()
+    if row is None:
+        raise HTTPException(404, "not found")
+    fpath = row["filepath"]
+    if not os.path.isfile(fpath):
+        raise HTTPException(404, "file not found on disk")
+    try:
+        from PIL import Image
+        import numpy as np
+        img = Image.open(fpath).convert("L")
+        arr = np.array(img, dtype=np.float64)
+        hist, edges = np.histogram(arr, bins=bins, range=(0, 256))
+        return {"histogram": hist.tolist(), "edges": edges.tolist()}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @app.delete("/api/images/{filename}")
 def delete_image_endpoint(filename: str):
     conn = get_conn()

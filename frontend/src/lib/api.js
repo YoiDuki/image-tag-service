@@ -119,3 +119,7 @@ export function setImagesPending(filters = {}) {
 		body: JSON.stringify(filters),
 	});
 }
+
+export function getHistogram(filename, bins = 32) {
+	return request(`/images/${encodeURIComponent(filename)}/histogram?bins=${bins}`);
+}

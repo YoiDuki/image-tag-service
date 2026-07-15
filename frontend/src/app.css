@@ -4,11 +4,35 @@
 [data-theme="light"] {
   --color-base-100: #f5f5f0;
   --color-base-200: #e8e8e3;
-  --color-base-300: #d6d6d1;
+  --color-base-300: #c8c8c3;
+  --color-base-content: #2a2a2a;
   --color-neutral: #2a2a2a;
   --color-neutral-content: #f5f5f0;
+  --color-primary: #2563eb;
+  --color-primary-content: #ffffff;
+  --color-secondary: #7c3aed;
+  --color-secondary-content: #ffffff;
+  --color-accent: #0d9488;
+  --color-accent-content: #ffffff;
+  --color-info: #0284c7;
+  --color-info-content: #ffffff;
+  --color-success: #16a34a;
+  --color-success-content: #ffffff;
+  --color-warning: #d97706;
+  --color-warning-content: #ffffff;
+  --color-error: #dc2626;
+  --color-error-content: #ffffff;
 }
 [data-theme="light"] .badge-ghost {
   background-color: var(--color-base-300);
   border-color: var(--color-base-300);
+}
+.badge {
+  justify-content: center;
+}
+select {
+  overflow: hidden !important;
+}
+.btn-neutral {
+  box-shadow: none !important;
 }
