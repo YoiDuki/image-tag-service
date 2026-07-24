@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { getImages, getImagesByColor, getStats, getFilters, updateImage, deleteImage, getTagsMeta, addTagMeta, updateTagMeta, deleteTagMeta, getTagSynonyms, addTagSynonym, deleteTagSynonym, setImagesPending, getHistogram } from './lib/api.js'
+  import { getImages, getImagesByColor, getStats, getFilters, updateImage, deleteImage, getTagsMeta, addTagMeta, updateTagMeta, deleteTagMeta, getTagSynonyms, addTagSynonym, deleteTagSynonym, setImagesPending, getHistogram, BASE } from './lib/api.js'
 
   const _CLIP_LABELS = [
     { idx: 0, label: 'Photograph', isMedia: true, isMatch: (img) => img.media_type === 'photograph' },
@@ -747,7 +747,7 @@ let searchTimer = $state(null)
               <div class="absolute inset-0 bg-base-300 animate-pulse"></div>
             {/if}
             <img
-              src="/api/images/{img.filename}/file"
+              src="{BASE}/images/{img.filename}/file"
               alt={img.filename}
               loading="lazy"
               onload={() => loadedImgs = new Set([...loadedImgs, img.filename])}
@@ -829,7 +829,7 @@ let searchTimer = $state(null)
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5 overflow-hidden min-h-0 flex-1">
         <div class="flex flex-col min-h-0">
           <div class="flex-1 min-h-0 relative overflow-hidden rounded-lg" class:grayscale={greyFilter}>
-            <img src="/api/images/{selectedImage.filename}/file" alt={selectedImage.filename} class="w-full h-full object-contain absolute inset-0" />
+            <img src="{BASE}/images/{selectedImage.filename}/file" alt={selectedImage.filename} class="w-full h-full object-contain absolute inset-0" />
           </div>
           {#if histogramLoading}
             <div class="flex-shrink-0 mt-2 h-12 bg-base-300 rounded animate-pulse"></div>

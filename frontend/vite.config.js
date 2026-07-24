@@ -3,6 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  base: '/collection/',
   plugins: [tailwindcss(), svelte()],
   server: {
     host: '0.0.0.0',

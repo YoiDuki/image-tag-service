@@ -1,4 +1,4 @@
-const BASE = "/api";
+export const BASE = (import.meta.env.VITE_API_BASE || '/api').replace(/\/+$/, '');
 
 async function request(path, options = {}) {
 	const res = await fetch(`${BASE}${path}`, {

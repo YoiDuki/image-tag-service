@@ -1,44 +1,53 @@
 import sys
 import os
-from tag.database import init_db, generate_tag_descriptions, get_conn
-from tag.scanner import process_new_files, process_pending
+import uvicorn
 
 
 def main():
-    init_db()
+    args = sys.argv[1:]
 
-    if len(sys.argv) < 2:
-        print("Usage:")
-        print("  python run_tag.py scan <directory> [limit]")
-        print("  python run_tag.py process [max_workers] [--force]")
-        print("  python run_tag.py gen-desc [top_n]")
-        print("  python run_tag.py gen-translations [top_n] [--overwrite]")
+    if not args or args[0] in ("run", "server"):
+        from backend.app import app
+        uvicorn.run("backend.app:app", host="0.0.0.0", port=5000, reload=True)
         return
 
-    command = sys.argv[1]
+    command = args[0]
 
     if command == "scan":
-        directory = sys.argv[2] if len(sys.argv) > 2 else "."
-        limit = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+        from tag.database import init_db
+        from tag.scanner import process_new_files
+        init_db()
+        directory = args[1] if len(args) > 1 else "."
+        limit = int(args[2]) if len(args) > 2 else 0
         process_new_files(directory, limit)
     elif command == "process":
-        force = "--force" in sys.argv
-        args = [a for a in sys.argv[2:] if a != "--force"]
-        max_workers = int(args[0]) if args else None
+        from tag.database import init_db
+        from tag.scanner import process_pending
+        init_db()
+        force = "--force" in args
+        worker_args = [a for a in args[1:] if a != "--force"]
+        max_workers = int(worker_args[0]) if worker_args else None
         process_pending(max_workers, force=force)
     elif command == "gen-desc":
-        top_n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+        from tag.database import init_db, generate_tag_descriptions
+        init_db()
+        top_n = int(args[1]) if len(args) > 1 else 10
         generate_tag_descriptions(top_n=top_n)
     elif command == "gen-translations":
-        overwrite = "--overwrite" in sys.argv
-        args = [a for a in sys.argv[2:] if a != "--overwrite"]
-        top_n = int(args[0]) if args else 500
-        _gen_translations(overwrite=overwrite, top_n=top_n)
+        from tag.database import init_db, get_conn
+        init_db()
+        _gen_translations(args)
     else:
         print(f"Unknown command: {command}")
+        print("Available commands:")
+        print("  (no args)         Start the web server")
+        print("  scan <dir> [lim]  Scan directory for new images")
+        print("  process [n] [--force]  Process pending images")
+        print("  gen-desc [n]      Generate tag descriptions")
+        print("  gen-translations [n] [--overwrite]  Generate translations")
 
 
-def _gen_translations(overwrite=False, top_n=500):
+def _gen_translations(args):
     try:
         from deep_translator import GoogleTranslator
     except ImportError:
@@ -47,6 +56,11 @@ def _gen_translations(overwrite=False, top_n=500):
 
     import json
     from collections import Counter
+    from tag.database import get_conn
+
+    overwrite = "--overwrite" in args
+    cmd_args = [a for a in args if a != "--overwrite"]
+    top_n = int(cmd_args[1]) if len(cmd_args) > 1 else 500
 
     conn = get_conn()
     rows = conn.execute("SELECT tags FROM images WHERE tags IS NOT NULL AND tags != '[]'").fetchall()
@@ -68,7 +82,6 @@ def _gen_translations(overwrite=False, top_n=500):
         conn.commit()
         existing.clear()
 
-    # Prioritize by frequency, take top_n
     candidates = [(tag, freq) for tag, freq in tag_freq.most_common() if tag not in existing]
     if top_n and top_n < len(candidates):
         candidates = candidates[:top_n]
